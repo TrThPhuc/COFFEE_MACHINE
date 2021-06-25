@@ -15,7 +15,7 @@
 #define mSec50  4000000
 #define Sec0_25 20000000
 
-#define Configure_TCA9539_IC1   0xFF30
+#define Configure_TCA9539_IC1   0xFD30
 #define Configure_TCA9539_IC2   0x89A0
 #define Configure_TCA9539_IC3   0x7C20
 extern void Temperature_Control(void);
