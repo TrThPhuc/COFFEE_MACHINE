@@ -15,7 +15,7 @@ typedef struct ADS1118
     uint16_t Code;
     bool swBit;
     int32_t cold_data, hot_data;
-    int16_t Actual_temperature;
+    float Actual_temperature;
 } ADS1118_t;
 
 #define ADS1118_OS             (0x8000)         //      single shot

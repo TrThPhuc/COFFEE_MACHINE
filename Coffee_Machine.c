@@ -87,8 +87,8 @@ uint16_t Pgain_Steam, Igain_Steam, Dgain_Steam, Dmax_Steam;
 uint16_t Pgain_HotWater, Igain_HotWater, Dgain_HotWater, Dmax_HotWater;
 // Vaiables
 uint8_t coef_change;
-float Steam_Temperature_Ref, Steam_Temperature_Fdbk, Steam_Vout;
-float HotWater_Temperature_Ref, HotWater_Temperature_Fdbk, HotWater_Vout;
+float Steam_Temperature_Ref, Steam_Vout;
+float HotWater_Temperature_Ref, HotWater_Vout;
 CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
 uint16_t Process_status;
 uint16_t SumOfCupInUsed = 0;
@@ -192,18 +192,18 @@ void main()
 //  Temperature Controll terminal assign
     CNTL_2P2Z_DBUFF_t Default = { 0, 0, 0, 0, 0 };
     Steam_CNTL.Ref = &Steam_Temperature_Ref;
-    Steam_CNTL.Fdbk = &Steam_Temperature_Fdbk;
+    Steam_CNTL.Fdbk = &Steam.Actual_temperature;
     Steam_CNTL.Out = &Steam_Vout;
     Steam_CNTL.DBUFF = Default;
     CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam,
                        Dmax_Steam, 0, -0.9);
 
     HotWater_CNTL.Ref = &HotWater_Temperature_Ref;
-    HotWater_CNTL.Fdbk = &HotWater_Temperature_Fdbk;
+    HotWater_CNTL.Fdbk = &Hot_Water.Actual_temperature;
     HotWater_CNTL.Out = &HotWater_Vout;
     HotWater_CNTL.DBUFF = Default;
-    CNTL_Pole_Zero_Cal(&HotWater_CNTL, Pgain_HotWater, Igain_HotWater, Dgain_HotWater,
-                       Dmax_Steam, 0, -0.9);
+    CNTL_Pole_Zero_Cal(&HotWater_CNTL, Pgain_HotWater, Igain_HotWater,
+                       Dgain_HotWater, Dmax_Steam, 0, -0.9);
 
 //=================================================================================
 
@@ -551,8 +551,8 @@ void ADS1118_Cal(ADS1118_t *ADS)
         {
             ADS_Read(0, &ADS->hot_data, ADS->Code);
             temp = ADS->hot_data + local_compensation(ADS->cold_data);
-            temp = ADC_code2temp(temp);
-            ADS->Actual_temperature = temp;
+            ADS->Actual_temperature  = ADC_code2temp(temp);
+
             ADS->swBit = true;
         }
     }

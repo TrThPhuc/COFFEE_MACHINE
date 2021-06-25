@@ -132,7 +132,6 @@ int local_compensation(int16_t local_code)
 int ADC_code2temp(int16_t code)
 {
     float temp;
-    int t;
 
     temp = (float) code;
 
@@ -226,8 +225,8 @@ int ADC_code2temp(int16_t code)
         temp = 0xA5A5;
     }
 
-    t = (int) (10 * temp);
+    //  t = (int) (10 * temp);
 
-    return t;
+    return temp;
 
 }

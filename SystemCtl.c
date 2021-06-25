@@ -13,9 +13,9 @@
 #define mSec2   160000
 #define mSec5   400000
 #define mSec50  4000000
-#define Sec0_25 20000000
+#define mSec125 10000000
 
-#define Configure_TCA9539_IC1   0xFD30
+#define Configure_TCA9539_IC1   0xFF30
 #define Configure_TCA9539_IC2   0x89A0
 #define Configure_TCA9539_IC3   0x7C20
 extern void Temperature_Control(void);
@@ -54,7 +54,7 @@ void TimerSysClt(void)
     TimerLoadSet(TIMER0_BASE, TIMER_A, mSec2);
     TimerLoadSet(TIMER1_BASE, TIMER_A, mSec5);
     TimerLoadSet(TIMER2_BASE, TIMER_A, mSec50);
-    TimerLoadSet(TIMER3_BASE, TIMER_A, Sec0_25);
+    TimerLoadSet(TIMER3_BASE, TIMER_A, mSec125);
 
 // Interrrupt timer configure
     TimerIntRegister(TIMER3_BASE, TIMER_A, &Temperature_Control);
