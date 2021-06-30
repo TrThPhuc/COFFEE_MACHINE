@@ -35,10 +35,10 @@ void CNTL_2P2Z(CNTL_2P2Z_Terminal_t *CNTL)
     CNTL->DBUFF.e2 = CNTL->DBUFF.e1;            // e(n-2) = e(n-1)
     ACC += CNTL->DBUFF.e1 * CNTL->Coef.b1;      // ACC = e(n-2)*b2 + e(n-1)*b1
     CNTL->DBUFF.e1 = CNTL->DBUFF.e;             // e(n-1) = e
-    ACC += CNTL->DBUFF.e * CNTL->Coef.b0;  // ACC = e(n-2)*b2 + e(n-1)*b1 + e*b0
-    ACC += CNTL->DBUFF.U2 * CNTL->Coef.a2; // ACC = e(n-2)*b2 + e(n-1)*b1 + e*b0 + u(n-2)*a2
+    ACC += CNTL->DBUFF.e * CNTL->Coef.b0;       // ACC = e(n-2)*b2 + e(n-1)*b1 + e*b0
+    ACC += CNTL->DBUFF.U2 * CNTL->Coef.a2;      // ACC = e(n-2)*b2 + e(n-1)*b1 + e*b0 + u(n-2)*a2
     CNTL->DBUFF.U2 = CNTL->DBUFF.U1;            // u(n-2) = u(n-1);
-    ACC += CNTL->DBUFF.U1 * CNTL->Coef.a1; // ACC = e(n-2)*b2 + e(n-1)*b1 + e*b0 + u(n-2)*a2 + u(n-1)*a1
+    ACC += CNTL->DBUFF.U1 * CNTL->Coef.a1;      // ACC = e(n-2)*b2 + e(n-1)*b1 + e*b0 + u(n-2)*a2 + u(n-1)*a1
     if (ACC > CNTL->Coef.max)                   // (max > ACC > i_min)
         ACC = CNTL->Coef.max;
     if (ACC < CNTL->Coef.i_min)

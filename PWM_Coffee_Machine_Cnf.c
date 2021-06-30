@@ -81,6 +81,7 @@ void PWMDRV_Coffee_machine_cnf(void)
 
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
     PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);
+
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
 //-------------------------Generation 0-----------------------------------
     PWMGenConfigure(PWM0_BASE, PWM_GEN_0,

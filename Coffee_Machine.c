@@ -24,6 +24,7 @@
 #include "inc/hw_qei.h"
 #include "inc/hw_types.h"
 #include "inc/hw_pwm.h"
+#include "inc/hw_ints.h"
 
 #include "driverlib/debug.h"
 #include "driverlib/gpio.h"
@@ -34,6 +35,8 @@
 #include "driverlib/i2c.h"
 #include "driverlib/pwm.h"
 #include "driverlib/timer.h"
+#include "driverlib/interrupt.h"
+#include "driverlib/udma.h"
 
 #include "ADS1118.h"
 #include "TCA9539.h"
@@ -45,11 +48,15 @@
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 // SYSTEM FUNCTION
 //---------------------------------------------------------------
+#define Null 0
+#define Int_SSI0
 extern void InitSysClt(void);      // Initialize system & peripheral clock
 void defaultISR(void);      // Default interrupt handler
 void GpioConfigure(void);   //
 void TimerSysClt(void);
 void (*Ptr_Task)(void);     // Pointer task
+extern void Cmd_ReadMsg(void);
+extern void Cmd_WriteMsg(void (*pFun)(void*), void *pArg);
 // The error routine that is called if the driver library encounters an error.
 #ifdef DEBUG
 void
@@ -82,9 +89,11 @@ uint32_t clockrate; // System clock
 // Temperature controll
 // PID coeficient translate to zeros and poles of heting process
 // PID Steam
-uint16_t Pgain_Steam, Igain_Steam, Dgain_Steam, Dmax_Steam;
+uint16_t Pgain_Steam, Igain_Steam, Dgain_Steam;
+uint32_t Dmax_Steam;
 // PID Hot water
-uint16_t Pgain_HotWater, Igain_HotWater, Dgain_HotWater, Dmax_HotWater;
+uint16_t Pgain_HotWater, Igain_HotWater, Dgain_HotWater;
+uint32_t Dmax_HotWater;
 // Vaiables
 uint8_t coef_change;
 float Steam_Temperature_Ref, Steam_Vout;
@@ -115,6 +124,9 @@ float PressHeating_Temp_Gui;
 void LCD_Interface_Cnf(void);
 void LCD_ST7567_Init(void);
 void Spi0_LCD_Interface_Cnf(void);
+
+extern void Init_SW_DMA(void);
+extern void Init_SPI_DMA(void);
 //Kernel for Communicate Host to LCD
 void SerialCommsInit(void); // Initialize task
 void SerialHostComms(void); // Task proceessed in period
@@ -131,6 +143,10 @@ uint16_t *Pr_Packet[16];    // Parameter
 uint8_t coeff_change;   // Flag for change parameter in mode
 int16_t VrTimer1[4];    // Virtual timer
 extern const unsigned char ascii_table_5x8[95][5]; // Bit Map for ASCII table (ASCII_Font.c)
+extern void WriteImageToDriverLCD(void *bufferPtr);
+uint8_t *LCD_IMAGE_Send, *LCD_IMAGE_Write;
+extern void ReadTxFiFO(void);
+extern void WriteTxFiFO(uint8_t c);
 // ---------------------------- ADS1118 Temperature Sensor ------------------------------------
 ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
@@ -147,6 +163,9 @@ uint32_t SetVolume;
 volatile bool FinishPumpEvent = false;
 void FlowMeterCal(void);
 void InitPumpingEvent(void);
+
+extern void SteamLevelControl_Run(void *PrPtr);
+extern void SteamLevelControl_Stop(void *PrPtr);
 // -------------------------------------Driver BLDC Motor ---------------------------------------
 // Configure 3 pwm chanel for 3 BLDC motor
 #define I2C0
@@ -164,6 +183,7 @@ void B_Base(void);  // Monitor machine
 void C_Base(void);
 
 void A1(void);
+void C1(void);
 void Default_B(void);
 void Default_C(void);
 uint16_t data[10] = { };
@@ -175,39 +195,62 @@ uint32_t duty = 100;
 void main()
 {
     // Initialize Device/board include:
-    // + Disable Wdog timer
+    // + Disable Wdog timer, Disable interrupt
     // + System clk, Peripheral clock
     // + GPIO init
+    IntMasterDisable();
     InitSysClt();
     TimerSysClt();
     Ptr_Task = &A_Base;
     A_Group_Task = &A1;
     B_Group_Task = &Default_B;
-    B_Group_Task = &Default_C;
+    C_Group_Task = &Default_C;
     // C_Group_Task = &C1;
     clockrate = SysCtlClockGet();
 
 // ---------------------------------- USER -----------------------------------------
 //=================================================================================
-//  Temperature Controll terminal assign
+//  Temperature Control terminal assign
     CNTL_2P2Z_DBUFF_t Default = { 0, 0, 0, 0, 0 };
     Steam_CNTL.Ref = &Steam_Temperature_Ref;
     Steam_CNTL.Fdbk = &Steam.Actual_temperature;
     Steam_CNTL.Out = &Steam_Vout;
     Steam_CNTL.DBUFF = Default;
+    Dmax_Steam = Dmax_HotWater = 80000;
     CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam,
-                       Dmax_Steam, 0, -0.9);
+                       Dmax_Steam, 0, -100);
 
     HotWater_CNTL.Ref = &HotWater_Temperature_Ref;
     HotWater_CNTL.Fdbk = &Hot_Water.Actual_temperature;
     HotWater_CNTL.Out = &HotWater_Vout;
     HotWater_CNTL.DBUFF = Default;
     CNTL_Pole_Zero_Cal(&HotWater_CNTL, Pgain_HotWater, Igain_HotWater,
-                       Dgain_HotWater, Dmax_Steam, 0, -0.9);
+                       Dgain_HotWater, Dmax_HotWater, 0, -0.9);
 
 //=================================================================================
 
     PWMDRV_Coffee_machine_cnf();
+
+//=================================================================================
+//  ADS1118 - Termperature Sensor Configuration - 2 channel
+//=================================================================================
+    Spi1_ADS1118_Interface_Cnf();   // Configurate spi1
+    ADS_Config(0);
+//=================================================================================
+//  TCA9539 - I/O Expander Configuration - 2 channel
+//=================================================================================
+    TCA9539_IC1._Id = 0x74; TCA9539_IC1.updateOutputFlag = 1;
+    TCA9539_IC2._Id = 0x74; TCA9539_IC2.updateOutputFlag = 1;   //0x75
+    TCA9539_IC3._Id = 0x74; TCA9539_IC3.updateOutputFlag = 1;   //0x77
+    I2C0_TCA9539_Configuration();
+    I2C0_TCA9539_IterruptTrigger_Cnf(); // Configure GPIO interrupt to respone intertupt signal of TCA9539
+
+// ----------------------------------  Configure QEI -----------------------------------------
+
+    //QEIIntRegister(QEI0_BASE, FlowMeterCal);
+    //QEIIntEnable(QEI0_BASE, QEI_INTTIMER);
+    // QEIEnable(QEI0_BASE);
+    QEIDisable(QEI0_BASE);
 //=================================================================================
 //  INITIALISATION - LCD-Display connections
 //=================================================================================
@@ -249,55 +292,25 @@ void main()
     Espresso_1.DirGrinding = Espresso_2.DirGrinding = true;
     Decatt_1.DirGrinding = Decatt_2.DirGrinding = false;
 
-//=================================================================================
-//  ADS1118 - Termperature Sensor Configuration - 2 channel
-//=================================================================================
-    Spi1_ADS1118_Interface_Cnf();   // Configurate spi1
-    ADS_Config(0);
-//=================================================================================
-//  TCA9539 - I/O Expander Configuration - 2 channel
-//=================================================================================
-    TCA9539_IC1._Id = 0x74;
-    TCA9539_IC2._Id = 0x75;
-    TCA9539_IC3._Id = 0x77;
-    I2C0_TCA9539_Configuration();
-    I2C0_TCA9539_IterruptTrigger_Cnf();
+    //  SetVolume = 200;
+    //  InitPumpingEvent();
+//=============================Enable And start System ========================================
+    TimerEnable(TIMER0_BASE, TIMER_A);
+    TimerEnable(TIMER1_BASE, TIMER_A);
+    TimerEnable(TIMER2_BASE, TIMER_A);
+    TimerEnable(TIMER3_BASE, TIMER_A);
 
-// ----------------------------------  Configure QEI -----------------------------------------
+//Clear interrupt Flag & enable interrupt (CPU level)
+    TimerIntClear(TIMER3_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
+    IntMasterEnable();
 
-    GPIOUnlockPin(GPIO_PORTD_BASE, GPIO_PIN_7);
-    GPIOPinConfigure(GPIO_PD6_PHA0);
-    GPIOPinConfigure(GPIO_PD7_PHB0);
-    GPIOPinTypeQEI(GPIO_PORTD_BASE, GPIO_PIN_6 | GPIO_PIN_7);
-    GPIOPadConfigSet(GPIO_PORTD_BASE, GPIO_PIN_7, GPIO_STRENGTH_2MA,
-    GPIO_PIN_TYPE_STD_WPD);
-    QEIDisable(QEI0_BASE);
-    QEIIntDisable(QEI0_BASE,
-    QEI_INTERROR | QEI_INTDIR | QEI_INTTIMER | QEI_INTINDEX);
-
-    QEIConfigure(
-            QEI0_BASE,
-            QEI_CONFIG_NO_RESET | QEI_CONFIG_CLOCK_DIR | QEI_CONFIG_NO_SWAP,
-            0xFFFFFFFF);
-    HWREG(QEI0_BASE + QEI_O_CTL) = ((HWREG(QEI0_BASE + QEI_O_CTL)
-            & ~(QEI_CTL_INVI)) | QEI_CTL_INVI);
-    QEIVelocityConfigure(QEI0_BASE, QEI_VELDIV_16, 500000);
-    QEIVelocityEnable(QEI0_BASE);
-    //QEIIntRegister(QEI0_BASE, FlowMeterCal);
-    //QEIIntEnable(QEI0_BASE, QEI_INTTIMER);
-    // QEIEnable(QEI0_BASE);
-    QEIDisable(QEI0_BASE);
-
-    SetVolume = 200;
-    InitPumpingEvent();
-
-    duty = 1000;
     while (1)
     {
         Ptr_Task();
+        Cmd_ReadMsg();
     }
 }
-// Task 5ms
+// Task 2ms
 void A_Base(void)
 {
     if (TimerIntStatus(TIMER0_BASE, false) == TIMER_TIMA_TIMEOUT)
@@ -338,6 +351,7 @@ void A1(void)
 void Default_B(void)
 {
     // Scan to output
+
     if (TCA9539_IC1.updateOutputFlag)
         TCA9539WriteOutput(&TCA9539_IC1);
     if (TCA9539_IC2.updateOutputFlag)
@@ -373,8 +387,16 @@ void Default_C(void)
             MakeCoffee();
         }
     }
+    C_Group_Task = &C1;
 }
-
+void C1(void)
+{
+    if ((TCA9539_IC3.TCA9539_Input.all & LevelSensor1) == 0)
+        Cmd_WriteMsg(&SteamLevelControl_Run, Null);
+    else
+        Cmd_WriteMsg(&SteamLevelControl_Stop, Null);
+    C_Group_Task = &Default_C;
+}
 void Spi0_LCD_Interface_Cnf()
 {
     // Configurate pin mux for SSI(SPI) peripheral function
@@ -386,14 +408,22 @@ void Spi0_LCD_Interface_Cnf()
     // COnfige Mode 0 SSI, Freq = 100Khz, 8Bit
     SSIConfigSetExpClk(SSI0_BASE, 80000000, SSI_FRF_MOTO_MODE_0,
     SSI_MODE_MASTER,
-                       100000, 8);
+                       20000000, 8);
+    SSIIntRegister(SSI0_BASE, &ReadTxFiFO);
+    SSIIntEnable(SSI0_BASE, SSI_TXFF);
 
-    SSILoopbackEnable(SSI0_BASE);
+    //SSILoopbackEnable(SSI0_BASE);
 
 }
 void LCD_Interface_Cnf()
 {
     Spi0_LCD_Interface_Cnf();
+    // SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
+    IntEnable(INT_SSI0);    // Not use interrupt
+
+    //uDMAEnable();
+    // Init_SW_DMA();
+    //Init_SPI_DMA();
     // Configurate Pin for proper ssi
     GPIOPinTypeSSI(GPIO_PORTA_BASE,
     GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
@@ -416,26 +446,42 @@ void LCD_Interface_Cnf()
     GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_7, 0);
 
 }
+
 void LCD_Write_Cmd(uint8_t cmd)
 {
     CLR_RS;
-
+#ifdef Polling_SSI0
     SSIDataPut(SSI0_BASE, (uint32_t) cmd);
-    while (SSIBusy(SSI0_BASE))
+    while (SSIBusy(SSI0_BASE))  // Polling method
     {
     }
+#endif
+#ifdef Int_SSI0
+    SSIIntEnable(SSI0_BASE, SSI_TXFF);
+    WriteTxFiFO(cmd);
+#endif
     // SSIDataGet(SSI0_BASE, (uint32_t*) &rdata);     // read dummy data
 
 }
 void LCD_Write_Dat(uint8_t cmd)
 {
-    SET_RS;
-    SSIDataPut(SSI0_BASE, (uint32_t) cmd);
-    while (SSIBusy(SSI0_BASE))
-    {
-    }
-    //  SSIDataGet(SSI0_BASE, (uint32_t*) &rdata);     // read dummy data
 
+    SET_RS;
+#ifdef Polling_SSI0
+    SSIDataPut(SSI0_BASE, (uint32_t) cmd);
+    /*    while (!(HWREG(SSI0_BASE + 0x0C) & 0x02))  // polling method
+     {
+     }*/
+    //  SSIDataGet(SSI0_BASE, (uint32_t*) &rdata);     // read dummy data
+#endif
+#ifdef uDma_SSI0
+
+    WriteImageToDriverLCD(LCD_IMAGE_Send);
+#endif
+#ifdef Int_SSI0
+    //SSIIntEnable(SSI0_BASE, SSI_TXFF);
+    WriteTxFiFO(cmd);
+#endif
 }
 void LCD_Address_Set(uint8_t page, uint8_t column)
 {
@@ -449,11 +495,16 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
 {
 
     uint8_t i = 0, j, k;
+
+    //index = 600;
     while (text[i] > 0x00)
     {
+
+        //
         if ((text[i] >= 0x20) && (text[i] <= 0x7e))
         {
             j = text[i] - 0x20;
+#if (defined  Polling_SSI0) || (defined  Int_SSI0)
             LCD_Address_Set(page, column);
             for (k = 0; k < 5; k++)
             {
@@ -461,7 +512,20 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
             }
             i++;
             column += 5;
+#endif
+#ifdef uDma_SSI0
+            static uint16_t index = 0;
 
+                for (k = 0; k < 5; k++)
+                {
+                    LCD_IMAGE_Write[index] = (uint8_t) ascii_table_5x8[15][k];
+                    index++;
+                    if(index >= 1024)   index = 0;
+                }
+                i++;
+                column += 5;
+
+#endif
         }
         else
             i++;
@@ -479,7 +543,7 @@ void LCD_ST7567_Init()
     SET_RST;
     SysCtlDelay(533333);    // 20ms
 
-    //CLR_CS;
+//CLR_CS;
 
     LCD_Write_Cmd(0xE2);
     SysCtlDelay(800000);
@@ -508,9 +572,10 @@ void LCD_ST7567_Init()
 
     LCD_Write_Cmd(0xAF);
 
+    LCD_Write_Cmd(0x7f);
     SysCtlDelay(2666666);
-    // SET_CS;
-    // LIGHT_ON;
+// SET_CS;
+// LIGHT_ON;
 }
 void LCD_Disp_Clr(uint8_t dat)
 {
@@ -551,7 +616,7 @@ void ADS1118_Cal(ADS1118_t *ADS)
         {
             ADS_Read(0, &ADS->hot_data, ADS->Code);
             temp = ADS->hot_data + local_compensation(ADS->cold_data);
-            ADS->Actual_temperature  = ADC_code2temp(temp);
+            ADS->Actual_temperature = ADC_code2temp(temp);
 
             ADS->swBit = true;
         }
@@ -565,7 +630,7 @@ void Spi1_ADS1118_Interface_Cnf()
     GPIOPinConfigure(GPIO_PD2_SSI1RX);
     GPIOPinConfigure(GPIO_PD3_SSI1TX);
     SSIClockSourceSet(SSI1_BASE, SSI_CLOCK_SYSTEM);
-    // COnfige Mode 0 SSI, Freq = 100Khz, 8Bit
+// COnfige Mode 0 SSI, Freq = 100Khz, 8Bit
     SSIConfigSetExpClk(SSI1_BASE, 80000000, SSI_FRF_MOTO_MODE_1,
     SSI_MODE_MASTER,
                        100000, 16);
@@ -573,32 +638,6 @@ void Spi1_ADS1118_Interface_Cnf()
     GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
 
     SSIEnable(SSI1_BASE);
-}
-void FlowMeterCal()
-{
-    QEIIntClear(QEI0_BASE, QEI_INTTIMER);
-    uint32_t temp;
-    temp = QEIPositionGet(QEI0_BASE);
-    MilliLitresBuffer = (float) temp * Calibration;
-    if (MilliLitresBuffer >= SetVolume)
-    {
-        totalMilliLitres = MilliLitresBuffer;
-        QEIIntRegister(QEI0_BASE, &defaultISR);
-        QEIDisable(QEI0_BASE);
-        QEIIntDisable(QEI0_BASE, QEI_INTTIMER);
-        FinishPumpEvent = true;
-
-    }
-
-}
-void InitPumpingEvent()
-
-{
-    MilliLitresBuffer = 0;
-    QEIPositionSet(QEI0_BASE, 0x0000);
-    QEIIntRegister(QEI0_BASE, &FlowMeterCal);
-    QEIIntEnable(QEI0_BASE, QEI_INTTIMER);
-    QEIEnable(QEI0_BASE);
 }
 
 void defaultFunction()

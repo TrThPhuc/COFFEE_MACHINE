@@ -9,10 +9,10 @@
 #define TCA9539_H_
 
 #include "stdbool.h"
-#define interrupt_method
-//#define Polling_method
+//#define interrupt_method
+#define Polling_method
 /************************** I2C Address ***************************************/
-#define TCA9539_ADDRESS     0x76        // I2C Address 1101 A1A2 + R/W
+#define TCA9539_ADDRESS     0x74        // I2C Address 1101 A1A2 + R/W
 // A1  = 1, A2 = 0
 /************************** I2C Registers *************************************/
 #define TCA9539_INPUT_PORT                      0X00
@@ -139,5 +139,5 @@ unsigned char I2C_Read_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
 unsigned char I2C_Write_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
                                unsigned char *data, unsigned char count);
 void I2CSlaveIntHandler(void);
-unsigned char I2C_Interrupt_Handler();
+void I2C_Interrupt_Handler();
 #endif /* TCA9539_H_ */

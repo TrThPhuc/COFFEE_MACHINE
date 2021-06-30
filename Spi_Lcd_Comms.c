@@ -24,6 +24,9 @@
 #include "driverlib/sysctl.h"
 #include "driverlib/ssi.h"
 #include "driverlib/pin_map.h"
+
+#include "TCA9539.h"
+extern TCA9539Regs TCA9539_IC1;
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 // System Defines
 //---------------------------------------------------------------
@@ -38,6 +41,10 @@ extern void LCD_Write_Cmd(uint8_t cmd);
 extern void LCD_Write_Data(uint8_t cmd);
 
 extern uint8_t coeff_change;
+extern uint8_t *LCD_IMAGE_Send, *LCD_IMAGE_Write;
+extern uint8_t LCD_IMAGE_Pri[1024];
+extern uint8_t LCD_IMAGE_Sec[1024];
+extern volatile uint8_t currentBuffer;
 // -------------------------------- KERNEL -------------------------------------
 extern void SerialCommsInit(void);
 extern void SerialHostComms(void);
@@ -74,8 +81,11 @@ extern void ReadFromEEPROM(void);
 void (*CmdDispatcher)(void) = defaultcmd;   // Dispatcher command button
 void (*LCD_TaskPointer)(void);              // Task pointer
 void (*PagePointer)(void);                  // Page pointer
-
+extern void clearBuffer(void *ptr);
+extern void WriteImageToDriverLCD(void *bufferPtr);
+extern void LCD_Write_Dat(uint8_t cmd);
 extern int16_t VrTimer1[4];
+extern void LCD_Address_Set(uint8_t page, uint8_t column);
 uint8_t Pr_Index = 0, NumOfPr, Offset = 0;    // Indicator  parameter
 uint8_t countList = 0;    // Count variable used to change page fuction
 uint16_t *ObjSelect, *ObjSelectStep;  // Object selected and step Object pointer
@@ -271,7 +281,7 @@ void ButtonSet_cmd()
 
     else
     {
-        if (VrTimer1[1] > 30 && Ack_reset == 0) // hold button set for change to page 0
+        if (VrTimer1[1] > 100 && Ack_reset == 0) // hold button set for change to page 0
         {
             Ack_reset = 1;
             VrTimer1[1] = ObjSelectFlag = 0;
@@ -443,7 +453,36 @@ void PageDisplay()
         page_change = 0;
 
     }
-    (*PagePointer)();
+#ifdef uDma_SSI0
+    if (VrTimer1[0] > 10) // refesh page
+    {
+        VrTimer1[0] = 0;
+        if (currentBuffer == 0)
+        {
+            LCD_IMAGE_Send = LCD_IMAGE_Pri;
+            LCD_IMAGE_Write = LCD_IMAGE_Sec;
+            currentBuffer = 1;
+
+        }
+
+        else
+        {
+            currentBuffer = 0;
+            LCD_IMAGE_Send = LCD_IMAGE_Sec;
+            LCD_IMAGE_Write = LCD_IMAGE_Pri;
+
+        }
+        clearBuffer((void*) LCD_IMAGE_Write);
+        LCD_Write_Dat(0);
+        (*PagePointer)();
+
+    }
+    else
+    {
+        VrTimer1[0]++;
+    }
+#endif
+      (*PagePointer)();
     LCD_TaskPointer = &GetButtonCmd;
 
 }
