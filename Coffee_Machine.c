@@ -16,33 +16,13 @@
 //----------------------------------------------------------------------------------
 // 22 June 2021 - Coffee machine firmware
 //==================================================================================
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
 
-#include "inc/hw_memmap.h"
-#include "inc/hw_qei.h"
-#include "inc/hw_types.h"
-#include "inc/hw_pwm.h"
-#include "inc/hw_ints.h"
-
-#include "driverlib/debug.h"
-#include "driverlib/gpio.h"
-#include "driverlib/sysctl.h"
-#include "driverlib/ssi.h"
-#include "driverlib/pin_map.h"
-#include "driverlib/qei.h"
-#include "driverlib/i2c.h"
-#include "driverlib/pwm.h"
-#include "driverlib/timer.h"
-#include "driverlib/interrupt.h"
-#include "driverlib/udma.h"
-
+#include "Coffee_Machine.h"
 #include "ADS1118.h"
 #include "TCA9539.h"
 #include "PID.h"
 #include "TCA9539_hw_memmap.h"
-#include "Coffee_Machine.h"
+
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 //////////////////////////////////PROTOTYPES///////////////////////////////////////////////
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -50,6 +30,7 @@
 //---------------------------------------------------------------
 #define Null 0
 #define Int_SSI0
+//#define Polling_SSI0
 extern void InitSysClt(void);      // Initialize system & peripheral clock
 void defaultISR(void);      // Default interrupt handler
 void GpioConfigure(void);   //
@@ -154,8 +135,11 @@ void ADS1118_Cal(ADS1118_t *ADS); // Calculate temperature
 int32_t dummyTemp;
 // ---------------------------- TCA9539 IO Expander Module -------------------------------------
 TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
+TCA9539Regs *TCA9539_IC[3] = { &TCA9539_IC1, &TCA9539_IC2, &TCA9539_IC3 };
 extern void I2C0_TCA9539_Configuration(void);
 extern void I2C0_TCA9539_IterruptTrigger_Cnf();
+extern volatile uint8_t Tx_slavecount, Tx_usedBrust;
+extern volatile uint8_t Rx_slavecount, Rx_usedBrust;
 // ------------------------------------- Flow Meter --------------------------------------------
 float Calibration; // Coeficient for calculate vollume pump
 uint32_t totalMilliLitres, MilliLitresBuffer;
@@ -183,6 +167,7 @@ void B_Base(void);  // Monitor machine
 void C_Base(void);
 
 void A1(void);
+void A2(void);
 void C1(void);
 void Default_B(void);
 void Default_C(void);
@@ -239,9 +224,15 @@ void main()
 //=================================================================================
 //  TCA9539 - I/O Expander Configuration - 2 channel
 //=================================================================================
-    TCA9539_IC1._Id = 0x74; TCA9539_IC1.updateOutputFlag = 1;
-    TCA9539_IC2._Id = 0x74; TCA9539_IC2.updateOutputFlag = 1;   //0x75
-    TCA9539_IC3._Id = 0x74; TCA9539_IC3.updateOutputFlag = 1;   //0x77
+    TCA9539_IC1._Id = 0x74;
+    TCA9539_IC1.TCA9539_Onput.all = 0xABCD;
+    TCA9539_IC1.updateOutputFlag = 1;
+    TCA9539_IC2._Id = 0x74;
+    TCA9539_IC2.TCA9539_Onput.all = 0x01EF;
+    TCA9539_IC2.updateOutputFlag = 1;   //0x75
+    TCA9539_IC3._Id = 0x74;
+    TCA9539_IC3.TCA9539_Onput.all = 0x5678;
+    TCA9539_IC3.updateOutputFlag = 1;   //0x77
     I2C0_TCA9539_Configuration();
     I2C0_TCA9539_IterruptTrigger_Cnf(); // Configure GPIO interrupt to respone intertupt signal of TCA9539
 
@@ -345,19 +336,38 @@ void A1(void)
 {
     // Communicate and display LCD
     SerialHostComms();
+    A_Group_Task = &A2;
 
 }
+void A2(void)
+{
+    if (TCA9539_IC1.ReadCmdFlag && !I2CMasterBusBusy(I2C0_BASE))
+        Cmd_WriteMsg((void (*)(void*)) TCA9539ReadInputReg,
+                     (void*) &TCA9539_IC1);
+    if (TCA9539_IC2.ReadCmdFlag && !I2CMasterBusBusy(I2C0_BASE))
+        Cmd_WriteMsg((void (*)(void*)) TCA9539ReadInputReg,
+                     (void*) &TCA9539_IC2);
+    if (TCA9539_IC3.ReadCmdFlag && !I2CMasterBusBusy(I2C0_BASE))
+        Cmd_WriteMsg((void (*)(void*)) TCA9539ReadInputReg,
+                     (void*) &TCA9539_IC3);
+    A_Group_Task = &A1;
+}
 // Task 5ms
+
 void Default_B(void)
 {
     // Scan to output
 
-    if (TCA9539_IC1.updateOutputFlag)
-        TCA9539WriteOutput(&TCA9539_IC1);
-    if (TCA9539_IC2.updateOutputFlag)
-        TCA9539WriteOutput(&TCA9539_IC2);
-    if (TCA9539_IC3.updateOutputFlag)
-        TCA9539WriteOutput(&TCA9539_IC3);
+    if (TCA9539_IC1.updateOutputFlag && !I2CMasterBusBusy(I2C0_BASE))
+        Cmd_WriteMsg((void (*)(void*)) TCA9539WriteOutput,
+                     (void*) &TCA9539_IC1);
+    if (TCA9539_IC2.updateOutputFlag && !I2CMasterBusBusy(I2C0_BASE))
+        Cmd_WriteMsg((void (*)(void*)) TCA9539WriteOutput,
+                     (void*) &TCA9539_IC2);
+    if (TCA9539_IC3.updateOutputFlag && !I2CMasterBusBusy(I2C0_BASE))
+        Cmd_WriteMsg((void (*)(void*)) TCA9539WriteOutput,
+                     (void*) &TCA9539_IC3);
+
     if (InProcess)
         B_Group_Task = &MakeCoffeProcess;
 }
@@ -409,9 +419,10 @@ void Spi0_LCD_Interface_Cnf()
     SSIConfigSetExpClk(SSI0_BASE, 80000000, SSI_FRF_MOTO_MODE_0,
     SSI_MODE_MASTER,
                        20000000, 8);
+#ifdef Int_SSI0
     SSIIntRegister(SSI0_BASE, &ReadTxFiFO);
     SSIIntEnable(SSI0_BASE, SSI_TXFF);
-
+#endif
     //SSILoopbackEnable(SSI0_BASE);
 
 }
@@ -460,7 +471,6 @@ void LCD_Write_Cmd(uint8_t cmd)
     SSIIntEnable(SSI0_BASE, SSI_TXFF);
     WriteTxFiFO(cmd);
 #endif
-    // SSIDataGet(SSI0_BASE, (uint32_t*) &rdata);     // read dummy data
 
 }
 void LCD_Write_Dat(uint8_t cmd)
@@ -469,9 +479,9 @@ void LCD_Write_Dat(uint8_t cmd)
     SET_RS;
 #ifdef Polling_SSI0
     SSIDataPut(SSI0_BASE, (uint32_t) cmd);
-    /*    while (!(HWREG(SSI0_BASE + 0x0C) & 0x02))  // polling method
-     {
-     }*/
+    while (SSIBusy(SSI0_BASE))  // polling method
+    {
+    }
     //  SSIDataGet(SSI0_BASE, (uint32_t*) &rdata);     // read dummy data
 #endif
 #ifdef uDma_SSI0
@@ -479,7 +489,7 @@ void LCD_Write_Dat(uint8_t cmd)
     WriteImageToDriverLCD(LCD_IMAGE_Send);
 #endif
 #ifdef Int_SSI0
-    //SSIIntEnable(SSI0_BASE, SSI_TXFF);
+    SSIIntEnable(SSI0_BASE, SSI_TXFF);
     WriteTxFiFO(cmd);
 #endif
 }

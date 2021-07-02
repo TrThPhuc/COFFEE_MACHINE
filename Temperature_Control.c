@@ -20,11 +20,12 @@
 #define Shutdown_Temp_HotWater 95
 
 #define PID_method
-extern TCA9539Regs TCA9539_IC1;
+extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
 extern CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
 extern void ADS1118_Cal(ADS1118_t*);
 extern float Steam_Vout, HotWater_Vout;
 extern void Led_Display();
+extern volatile uint8_t In_TxBrust;
 
 extern ADS1118_t Steam, Hot_Water;
 // True task 125ms
@@ -66,9 +67,11 @@ void Temperature_Control(void)
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3_BIT, (uint32_t) Steam_Vout);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4_BIT, (uint32_t) HotWater_Vout);
 
-          TCA9539_IC1.updateOutputFlag = 1;
-          // Sub fuction
-         // Led_Display();
+       TCA9539_IC1.updateOutputFlag = 1;
+       TCA9539_IC2.updateOutputFlag = 1;
+       TCA9539_IC3.updateOutputFlag = 1;
+        // Sub fuction
+        // Led_Display();
     }
 
 }

@@ -9,8 +9,8 @@
 #define TCA9539_H_
 
 #include "stdbool.h"
-//#define interrupt_method
-#define Polling_method
+#define interrupt_method
+//#define Polling_method
 /************************** I2C Address ***************************************/
 #define TCA9539_ADDRESS     0x74        // I2C Address 1101 A1A2 + R/W
 // A1  = 1, A2 = 0
@@ -124,11 +124,14 @@ typedef struct
     union TCA9539_PolInv_Port_Regs TCA9539_PolInv;
     union TCA9539_Configuration_Port_Regs TCA9539_Config;
     bool updateOutputFlag;
+    bool ReadCmdFlag;
 
 } TCA9539Regs;
 void TCA9539WriteConfig(TCA9539Regs *Regs);
 void TCA9539WriteOutput(TCA9539Regs *Regs);
 void TCA9539WritePolarity(TCA9539Regs *Regs);
+
+void TCA9539WriteOutput_BrustSlave(TCA9539Regs **RegsA);
 
 void TCA9539InitDefault(TCA9539Regs *Regs);
 void TCA9539Init(TCA9539Regs *Regs);

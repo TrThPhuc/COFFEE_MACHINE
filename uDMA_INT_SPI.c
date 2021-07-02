@@ -30,7 +30,7 @@ uint8_t ui8ControlTable[1024] __attribute__ ((aligned(1024)));
 #endif
 //*****************************************************************************
 #define TXBUF_SIZE 10
-#define MEM_BUFFER_SIZE         64
+#define MEM_BUFFER_SIZE         128
 uint8_t ui8TxBuf[MEM_BUFFER_SIZE];
 #define page 8
 #define col 128

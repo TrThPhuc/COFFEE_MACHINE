@@ -31,8 +31,13 @@ unsigned char ex_count = 0;
 unsigned char Slave_Address_ptr;
 void I2C0_TCA9539_Configuration(void);
 extern void Read_INT_Handler(void);
+extern void Cmd_WriteMsg(void (*pFun)(void*), void *pArg);
 uint32_t g_ui32DataRx;
-
+extern TCA9539Regs *TCA9539_IC[3];
+volatile uint8_t Tx_slavecount, Tx_usedBrust, In_TxBrust;
+volatile uint8_t Rx_slavecount, Rx_usedBrust;
+#define NumofSlave 3
+volatile unsigned char index = 0;
 /*******************************************************************************
  *    USI interrupt service routine used for I2C State Machine                   *
  *******************************************************************************/
@@ -64,20 +69,22 @@ uint32_t g_ui32DataRx;
  *  USCI_B0 I2C Transmit ISR. Enable USCI_B0 I2C transmit interrupt and set USCIAB0TX_ISR as the interrupt handler.
  *  Then set the transmit interrupt to Manual on interrupt return.
  */
+
 unsigned char I2C_Write_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
                                unsigned char *data, unsigned char count)
 {
 
-    //  I2CMasterIntEnable(I2C0_BASE);
-    // Wait for i2c bus idle
+    // Wait for i2c bus idle, used for multi master
+    // Or single transfer to 1 slave
     while (I2CMasterBusBusy(I2C0_BASE))
-        ; // Just use for multy master
+        ;
+
     I2CMasterSlaveAddrSet(I2C0_BASE, Slave_Add, Write);
     I2CMasterDataPut(I2C0_BASE, Res_Add);
     I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START); // Start + slave add(w)+ Ack + res_add_
 
 #ifdef Polling_method
-    unsigned char index = 0;
+    index = 0;
     do
     {
         while (I2CMasterBusy(I2C0_BASE))
@@ -112,6 +119,7 @@ unsigned char I2C_Write_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
     return Nerror;
 #endif
 #ifdef interrupt_method
+    I2CMasterIntEnable(I2C0_BASE);
     startRepeat_FollowedReceive = PtrTransmit = 0;
     I2C_Tx_ptr = data;
     ex_count = count;
@@ -124,8 +132,6 @@ unsigned char I2C_Read_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
                               unsigned char *data, unsigned char count)
 {
 
-// wait for i2c bus idle
-    //  I2CMasterIntEnable(I2C0_BASE);
     while (I2CMasterBusBusy(I2C0_BASE))
         ;
     I2CMasterSlaveAddrSet(I2C0_BASE, Slave_Add, Write);     // write cmd
@@ -134,7 +140,7 @@ unsigned char I2C_Read_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
     I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
 
 #ifdef Polling_method
-    unsigned char index = 0;
+    unsigned char indexRX = 0;
     // Wait controller modun busy
     while (I2CMasterBusy(I2C0_BASE))
         ;
@@ -155,10 +161,10 @@ unsigned char I2C_Read_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
                 I2C_MASTER_CMD_BURST_RECEIVE_ERROR_STOP);
             return error;
         }
-        data[index] = I2CMasterDataGet(I2C0_BASE);      // read data 0
+        data[indexRX] = I2CMasterDataGet(I2C0_BASE);      // read data 0
 
-        index++;
-        if (index < count - 1)
+        indexRX++;
+        if (indexRX < count - 1)
         {
             I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_CONT); //D+1 + ACK_master
             continue;
@@ -173,11 +179,11 @@ unsigned char I2C_Read_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
         ;
     if (I2CMasterErr(I2C0_BASE))
         return error;
-    data[index] = I2CMasterDataGet(I2C0_BASE); // read data 1
+    data[indexRX] = I2CMasterDataGet(I2C0_BASE); // read data 1
     return Nerror;
 #endif
 #ifdef interrupt_method
-
+    I2CMasterIntEnable(I2C0_BASE);
     startRepeat_FollowedReceive = PtrTransmit = 1;
     Slave_Address_ptr = Slave_Add;
     I2C_Rx_ptr = data;
@@ -185,6 +191,7 @@ unsigned char I2C_Read_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
     return Nerror;
 #endif
 }
+
 void TCA9539Init(TCA9539Regs *Regs)
 {
     I2C0_TCA9539_Configuration();
@@ -199,18 +206,28 @@ void TCA9539Init(TCA9539Regs *Regs)
                      (unsigned char*) &Regs->TCA9539_Config, 2);
 
 }
+//------------------------------------------------------------------------------------//
 void TCA9539ReadInputReg(TCA9539Regs *Regs)
 {
 
+    Regs->ReadCmdFlag = 0;
     I2C_Read_Buffer(Regs->_Id, TCA9539_INPUT_PORT,
                     (unsigned char*) &Regs->TCA9539_Input, 2);
 }
+void TCA9539ReadInputReg_BrustSlave(TCA9539Regs **RegsA)
+{
+    //BrustSlave_Write(&TCA9539_IC);
+    Rx_usedBrust = 1;
+    I2C_Read_Buffer(RegsA[Rx_slavecount]->_Id, TCA9539_INPUT_PORT,
+                    (unsigned char*) &RegsA[Rx_slavecount]->TCA9539_Input, 2);
+}
+//------------------------------------------------------------------------------------//
 void TCA9539WriteConfig(TCA9539Regs *Regs)
 {
     I2C_Write_Buffer(Regs->_Id, TCA9539_CONFIG_PORT,
                      (unsigned char*) &Regs->TCA9539_Config, 2);
-
 }
+//------------------------------------------------------------------------------------//
 void TCA9539WriteOutput(TCA9539Regs *Regs)
 {
     Regs->updateOutputFlag = false;
@@ -218,6 +235,14 @@ void TCA9539WriteOutput(TCA9539Regs *Regs)
                      (unsigned char*) &Regs->TCA9539_Onput, 2);
 
 }
+void TCA9539WriteOutput_BrustSlave(TCA9539Regs **RegsA)
+{
+    RegsA[Tx_slavecount]->updateOutputFlag = false;
+    Tx_usedBrust = 1;
+    I2C_Write_Buffer(RegsA[Tx_slavecount]->_Id, TCA9539_OUTPUT_PORT,
+                     (unsigned char*) &RegsA[Tx_slavecount]->TCA9539_Onput, 2);
+}
+//------------------------------------------------------------------------------------//
 void TCA9539WritePolarity(TCA9539Regs *Regs)
 {
     I2C_Write_Buffer(Regs->_Id, TCA9539_POL_INVERSE_PORT,
@@ -235,19 +260,19 @@ void I2C0_TCA9539_Configuration(void)
     GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
 
     I2CMasterInitExpClk(I2C0_BASE, SysCtlClockGet(), true); // rate 400Khz
-
-    // I2CMasterIntEnable(I2C0_BASE);
-    //I2CMasterIntEnableEx(I2C0_BASE, I2C_MASTER_INT_DATA); // TM4C129
-
-    // Enable loop back for test
+#ifdef interrupt_method
+    I2CMasterIntEnable(I2C0_BASE);
+    I2CMasterIntEnableEx(I2C0_BASE, I2C_MASTER_INT_DATA); // TM4C129
+#endif
+// Enable loop back for test
     I2CLoopbackEnable(I2C0_BASE);
-    //IntEnable(I2C0_BASE);
+//IntEnable(I2C0_BASE);
 
     I2CSlaveIntEnableEx(I2C0_BASE, I2C_SLAVE_INT_DATA);
     I2CSlaveEnable(I2C0_BASE);
     I2CSlaveInit(I2C0_BASE, TCA9539_ADDRESS);
 
-    // Asign intrrupt handler
+// Asign intrrupt handler
     I2CIntRegister(I2C0_BASE, I2C_Interrupt_Handler);
 
     IntMasterEnable();
@@ -255,7 +280,7 @@ void I2C0_TCA9539_Configuration(void)
 }
 void I2C0_TCA9539_IterruptTrigger_Cnf()
 {
-    // GPIO interrupt PB1
+// GPIO interrupt PB1
     GPIODirModeSet(GPIO_PORTB_BASE, GPIO_PIN_1, GPIO_DIR_MODE_IN);
     GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_1, GPIO_STRENGTH_2MA,
     GPIO_PIN_TYPE_STD_WPU);
@@ -277,6 +302,7 @@ void I2C_Interrupt_Handler()
     {
         I2CSlaveIntClear(I2C0_BASE);
         uint8_t status = I2CSlaveStatus(I2C0_BASE) & 0x03;
+        uint8_t temp;
         switch (status)
         {
         case I2C_SLAVE_ACT_RREQ:
@@ -285,11 +311,12 @@ void I2C_Interrupt_Handler()
             break;
         case I2C_SLAVE_ACT_TREQ:
 
-            I2CSlaveDataPut(I2C0_BASE, 0xAA);
+            I2CSlaveDataPut(I2C0_BASE, 0xAB);
             break;
         };
     }
-//----------- Master interrupt-------------------//
+//--------------------------------- Master interrupt-----------------------------------//
+
     if (I2CMasterIntStatus(I2C0_BASE, true))
     {
         I2CMasterIntClear(I2C0_BASE);
@@ -300,35 +327,76 @@ void I2C_Interrupt_Handler()
                 I2CMasterControl(I2C0_BASE,
                 I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
             //I2CMasterIntDisable(I2C0_BASE);
-            I2CMasterIntDisable(I2C0_BASE);
-            return 1;
+            return;
         }
-        if ((HWREG(I2C0_BASE + I2C_O_MSA) & I2C_MSA_RS) == 0) // transmit operation
+        //-----------------------Transmit operation-----------------------//
+        if ((HWREG(I2C0_BASE + I2C_O_MSA) & I2C_MSA_RS) == 0)
         {
             if (startRepeat_FollowedReceive)
             {
                 I2CMasterSlaveAddrSet(I2C0_BASE, Slave_Address_ptr, Read);
                 I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_START);
                 startRepeat_FollowedReceive = PtrTransmit = 0;
-                return 0;
+                return;
             }
 
-            I2CMasterDataPut(I2C0_BASE, I2C_Tx_ptr[PtrTransmit]);
+            uint8_t data = I2C_Tx_ptr[PtrTransmit];
 
             PtrTransmit++;
-            if (PtrTransmit < ex_count)
-                I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
-            else
+            uint8_t num;
+            if (Tx_usedBrust == 0)
             {
-                //I2CMasterIntDisable(I2C0_BASE);
-                I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
+                I2CMasterDataPut(I2C0_BASE, data);
+                if (PtrTransmit < ex_count)
+                    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
+                else
+                    I2CMasterControl(I2C0_BASE,
+                    I2C_MASTER_CMD_BURST_SEND_FINISH);
             }
+            /*          else
+             {
+             bool restart = Tx_slavecount < (NumofSlave - 1);
+
+             if (restart)
+             {
+             if (PtrTransmit <= ex_count)
+             {
+             I2CMasterDataPut(I2C0_BASE, data);
+             I2CMasterControl(I2C0_BASE,
+             I2C_MASTER_CMD_BURST_SEND_CONT);
+             }
+             else
+             {
+             Tx_slavecount++;
+             TCA9539WriteOutput_BrustSlave(TCA9539_IC);
+
+             }
+
+             }
+             else
+             {
+             I2CMasterDataPut(I2C0_BASE, data);
+             if (PtrTransmit < ex_count)
+             I2CMasterControl(I2C0_BASE,
+             I2C_MASTER_CMD_BURST_SEND_CONT);
+             else
+             {
+             I2CMasterControl(I2C0_BASE,
+             I2C_MASTER_CMD_BURST_SEND_FINISH);
+             Tx_slavecount = Tx_usedBrust = In_TxBrust = 0;
+             I2CMasterIntDisable(I2C0_BASE);
+             }
+             }
+
+             }*/
         }
-        else     // Recieve operation
+        //--------------------------Recieve operation------------------//
+        else
         {
             uint8_t temp = I2CMasterDataGet(I2C0_BASE);
             I2C_Rx_ptr[PtrTransmit] = temp;
             PtrTransmit++;
+
             if (PtrTransmit < ex_count - 1)
             {
                 I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_CONT); //D+1 + ACK_master
@@ -336,13 +404,13 @@ void I2C_Interrupt_Handler()
             }
             else
             {
-                //I2CMasterIntDisable(I2C0_BASE);
+
                 I2CMasterControl(I2C0_BASE,
                 I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+
             }
         }
     }
-
-    return 0;
+    return;
 }
 
