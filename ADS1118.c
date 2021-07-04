@@ -18,14 +18,16 @@
 #include "inc/hw_memmap.h"
 #include "driverlib/debug.h"
 #include "driverlib/gpio.h"
-extern void ADS1118_Coms(uint16_t config, int mode, int32_t *result);
+#include "driverlib/sysctl.h"
+extern void ADS1118_Coms(uint16_t config, int mode);
 extern int32_t dummyTemp;
 void ADS_Config(unsigned int mode)
 {
-    ADS_Read(mode, &dummyTemp, ADSCON_CH0);
+    //ADS_Read(mode, ADSCON_CH0);
+    //ADS_Read(mode, ADSCON_CH1);
 
 }
-void ADS_Read(uint16_t mode, int32_t *_result, uint16_t code)
+void ADS_Read(uint16_t mode,uint16_t code)
 {
     //volatile uint8_t DRDY = GPIOPinRead(GPIO_PORTD_BASE, GPIO_PIN_2);
 
@@ -35,7 +37,8 @@ void ADS_Read(uint16_t mode, int32_t *_result, uint16_t code)
     else
         tmp = code + ADS1118_TS; // temperature sensor mode.DR=8sps, PULLUP on DOUT
     // Write Config
-    ADS1118_Coms(tmp, 1, _result);
+
+    ADS1118_Coms(tmp, 1);
     // Set CS high to end transaction
 
 }
@@ -129,7 +132,7 @@ int local_compensation(int16_t local_code)
  * A common error is to look for the table value for the measured voltage and
  * add the cold junction temperature.
  ******************************************************************************/
-int ADC_code2temp(int16_t code)
+float ADC_code2temp(int16_t code)
 {
     float temp;
 
@@ -225,7 +228,7 @@ int ADC_code2temp(int16_t code)
         temp = 0xA5A5;
     }
 
-    //  t = (int) (10 * temp);
+    //temp = (int) (10 * temp);
 
     return temp;
 

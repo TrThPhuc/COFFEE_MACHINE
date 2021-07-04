@@ -50,9 +50,9 @@ typedef struct ADS1118
 
 void ADS_Config(unsigned int mode);
 void WriteSPI(uint16_t config, int16_t mode);
-void ADS_Read(uint16_t mode, int32_t *_result, uint16_t code);
+void ADS_Read(uint16_t mode, uint16_t code);
 
-int ADC_code2temp(int16_t code); // transform ADC code for far-end to temperature.
+float ADC_code2temp(int16_t code); // transform ADC code for far-end to temperature.
 int local_compensation(int16_t local_code); // transform from local sensor code to thermocouple's compensation code.
 
 #endif /* ADS1118_H_ */

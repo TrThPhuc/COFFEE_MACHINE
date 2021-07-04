@@ -43,6 +43,8 @@ void InitSysClt(void)
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
 
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
+
 }
 void TimerSysClt(void)
 {

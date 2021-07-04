@@ -131,8 +131,15 @@ extern void WriteTxFiFO(uint8_t c);
 // ---------------------------- ADS1118 Temperature Sensor ------------------------------------
 ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
+extern void SSI1_IntHandler(void);
 void ADS1118_Cal(ADS1118_t *ADS); // Calculate temperature
 int32_t dummyTemp;
+volatile uint8_t datacount = 0;
+uint32_t datas, fb_config;
+#define MEM_BUFFER_SIZE         2
+extern uint16_t ui16TxBuf[];
+extern uint16_t ui16RxBuf[];
+uint16_t volatile Settingconfig;
 // ---------------------------- TCA9539 IO Expander Module -------------------------------------
 TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
 TCA9539Regs *TCA9539_IC[3] = { &TCA9539_IC1, &TCA9539_IC2, &TCA9539_IC3 };
@@ -197,6 +204,8 @@ void main()
 //=================================================================================
 //  Temperature Control terminal assign
     CNTL_2P2Z_DBUFF_t Default = { 0, 0, 0, 0, 0 };
+    Steam.Code = ADSCON_CH0;
+    Steam.Actual_temperature = 0;
     Steam_CNTL.Ref = &Steam_Temperature_Ref;
     Steam_CNTL.Fdbk = &Steam.Actual_temperature;
     Steam_CNTL.Out = &Steam_Vout;
@@ -205,6 +214,8 @@ void main()
     CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam,
                        Dmax_Steam, 0, -100);
 
+    Hot_Water.Code = ADSCON_CH1;
+    Hot_Water.Actual_temperature = 0;
     HotWater_CNTL.Ref = &HotWater_Temperature_Ref;
     HotWater_CNTL.Fdbk = &Hot_Water.Actual_temperature;
     HotWater_CNTL.Out = &HotWater_Vout;
@@ -299,6 +310,7 @@ void main()
     {
         Ptr_Task();
         Cmd_ReadMsg();
+
     }
 }
 // Task 2ms
@@ -430,8 +442,7 @@ void LCD_Interface_Cnf()
 {
     Spi0_LCD_Interface_Cnf();
     // SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
-    IntEnable(INT_SSI0);    // Not use interrupt
-
+    IntEnable(INT_SSI0);
     //uDMAEnable();
     // Init_SW_DMA();
     //Init_SPI_DMA();
@@ -601,52 +612,84 @@ void LCD_Disp_Clr(uint8_t dat)
         }
     }
 }
-void ADS1118_Coms(uint16_t config, int mode, int32_t *_result)
+void ADS1118_Coms(uint16_t config, int mode)
 {
 
-    if (mode == 1)
-        config = config | 0x8000;
-    SSIDataPut(SSI1_BASE, (uint32_t) config);
-    while (SSIBusy(SSI1_BASE))
-        ;
-    SSIDataGet(SSI1_BASE, (uint32_t*) _result);
+    /*    if (mode == 1)
+     config = config | 0x8000;   // Signgle shot conversion
+
+     SSIDataPut(SSI1_BASE, (uint32_t) config);
+     SSIDataPut(SSI1_BASE, (uint32_t) config);
+     while (SSIBusy(SSI1_BASE))
+     ;
+     SSIDataGet(SSI1_BASE, (uint32_t*) &datas);
+     SSIDataGet(SSI1_BASE, (uint32_t*) &fb_config);
+     config = ((config & 0x7FFF) | 0x01);
+     if (config == fb_config)            // CH0 0x8B8A   // Steam
+     {
+     if (fb_config == (0xB9B))       //8b9a & 7FFF = B9A
+     Steam.hot_data = datas;     //Steam.Code = 0x8B8A
+     else if (fb_config == 0xB8B)    //8b8a
+     Steam.cold_data = datas;
+     else if (fb_config == 0x3B9B)   // CH1 BB8A         // Hot_Water
+     Hot_Water.hot_data = datas; //bb9a & 7FFF = 3b9a
+     else if (fb_config == 0x3B8B)   //bb8a & 7fff = 3b8a
+     Hot_Water.cold_data = datas;
+     }*/
+    config = config | 0x8000;
+    ui16TxBuf[0] = config;
+    ui16TxBuf[1] = config;
+ //   Settingconfig = ((ui16TxBuf[0] & 0x7FFF) | 0x01);
+    uDMAChannelEnable(UDMA_CHANNEL_SSI1TX);
+    uDMAChannelEnable(UDMA_CHANNEL_SSI1RX);
+
 }
 void ADS1118_Cal(ADS1118_t *ADS)
 {
 
     int16_t temp;
-    if (GPIOPinRead(GPIO_PORTD_BASE, GPIO_PIN_1) != 0)
-    {
-        if (ADS->swBit)
-        {
-            ADS_Read(1, &ADS->cold_data, ADS->Code);
-            ADS->swBit = false;
-        }
-        else
-        {
-            ADS_Read(0, &ADS->hot_data, ADS->Code);
-            temp = ADS->hot_data + local_compensation(ADS->cold_data);
-            ADS->Actual_temperature = ADC_code2temp(temp);
 
-            ADS->swBit = true;
-        }
+    /*
+     ADS_Read(1, ADS->Code);     // Hot data request, read  cold data
+     SysCtlDelay(1333333);
+     ADS_Read(0, ADS->Code);     // cold data request, read hot data
+     */
+    if (ADS->swBit)
+    {
+        ADS_Read(0, ADS->Code);
+        ADS->swBit = 0;
     }
+    else
+    {
+        ADS->swBit = 1;
+        ADS_Read(1, ADS->Code);
+    }
+
+    temp = ADS->hot_data + local_compensation(ADS->cold_data);
+    ADS->Actual_temperature = ADC_code2temp(temp);
 
 }
 void Spi1_ADS1118_Interface_Cnf()
 {
-    GPIOPinConfigure(GPIO_PD0_SSI1CLK);
-    GPIOPinConfigure(GPIO_PD1_SSI1FSS);
-    GPIOPinConfigure(GPIO_PD2_SSI1RX);
-    GPIOPinConfigure(GPIO_PD3_SSI1TX);
+    GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0); // unlock pin PF0
+    GPIOPinConfigure(GPIO_PF2_SSI1CLK);
+    GPIOPinConfigure(GPIO_PF3_SSI1FSS);
+    GPIOPinConfigure(GPIO_PF0_SSI1RX);
+    GPIOPinConfigure(GPIO_PF1_SSI1TX);
     SSIClockSourceSet(SSI1_BASE, SSI_CLOCK_SYSTEM);
 // COnfige Mode 0 SSI, Freq = 100Khz, 8Bit
     SSIConfigSetExpClk(SSI1_BASE, 80000000, SSI_FRF_MOTO_MODE_1,
     SSI_MODE_MASTER,
-                       100000, 16);
-    GPIOPinTypeSSI(GPIO_PORTD_BASE,
+                       2500000, 16);
+    GPIOPinTypeSSI(GPIO_PORTF_BASE,
     GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
 
+    SSIIntRegister(SSI1_BASE, &SSI1_IntHandler);
+    SSIIntEnable(SSI1_BASE, SSI_DMATX);
+    SSIIntEnable(SSI1_BASE, SSI_DMARX);
+    IntEnable(INT_SSI1);
+    uDMAEnable();
+    Init_SPI_DMA();
     SSIEnable(SSI1_BASE);
 }
 

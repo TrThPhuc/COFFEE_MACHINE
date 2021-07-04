@@ -194,8 +194,8 @@ void ReturnNode()
 }
 void SerialCommsInit(void)
 {
-    ButtonCmd_Init();
-    LCD_TaskPointer = &GetButtonCmd;
+    //ButtonCmd_Init();
+    LCD_TaskPointer = &CmdInterpreter;
     PagePointer = &Page0_Display;
     MenuInitialize();
     NodeSelected = &Menu;
@@ -483,7 +483,7 @@ void PageDisplay()
     }
 #endif
       (*PagePointer)();
-    LCD_TaskPointer = &GetButtonCmd;
+    LCD_TaskPointer = &CmdInterpreter;
 
 }
 
