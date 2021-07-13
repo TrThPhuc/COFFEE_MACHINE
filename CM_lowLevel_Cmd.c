@@ -32,7 +32,7 @@ volatile bool LevelControlTriger;
 uint32_t VrTimer_Grinding;
 uint32_t VrTimer_Compress;
 uint16_t SpeedDuty_Pump;
-const uint32_t Pos_Compress = 30;
+const uint32_t Pos_Compress = 80;
 
 extern volatile uint32_t SetVolume;
 extern volatile bool FinishPumpEvent;
@@ -42,7 +42,7 @@ extern void defaultISR(void);
 volatile uint8_t stage, HomePeding;
 extern Mode_Parameter_t *ModeSelected;
 
-#define Osmosis_pump        2000
+#define Osmosis_pump        4000
 #define HighPressure_Pump   7999
 #define NumberOfStep  6
 void (*msg_queue[MSG_QUEUE_SIZE])(void*);
@@ -61,6 +61,7 @@ extern void (*B_Group_Task)(void);
 extern void Default_B(void);
 extern uint32_t clockrate;
 extern bool readinput;
+extern bool cancel_cmd;
 
 extern void InitPumpingEvent();
 extern void TCA9539ReadInputReg_BrustSlave(TCA9539Regs **RegsA);
@@ -116,7 +117,7 @@ void Grinding_Process_Run(void *PrPtr)
                 & ~(Enable_BLDC1)) | Enable_BLDC1);
         // Enable PWM
         PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 1000); // Max speed
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 7999); // Max speed
         VrTimer_Grinding = Mode->GrindingDuration;
         TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
         TimerIntEnable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
@@ -346,6 +347,8 @@ void CheckingFinish_StepInRuning()
                 step_status[step] = Finish;
 
             }
+            if (cancel_cmd)
+                VrTimer_Grinding = 0;
             break;
         case 2: // Compress coffee
             if ((VrTimer_Compress == 0) && InCompress)
@@ -437,10 +440,12 @@ void MakeCoffeProcess(void)
             if ((InHomeReturn) && (step_status[step] == Finish))
             {
                 InHomeReturn = 0;
-                (step == 5) ? (InProcess = step = 0) : (step++);
+
+                ((step == 5) || (cancel_cmd)) ?
+                        (InProcess = step = 0, cancel_cmd = 0) : (step++);
             }
             break;
-        case 1: // Grinding coffe
+        case 1: // Grinding coffee
             if (!InGrinding)
             {
                 step_status[step] = Running;
@@ -450,6 +455,7 @@ void MakeCoffeProcess(void)
             }
             if ((InGrinding) && (step_status[step] == Finish))
             {
+
                 InGrinding = 0;
                 step++;
             }
@@ -464,8 +470,15 @@ void MakeCoffeProcess(void)
             }
             if ((InCompress) && (step_status[step] == Finish))
             {
+
                 InCompress = 0;
+                if (cancel_cmd)
+                {
+                    step = 0;
+                    goto skip_compress;
+                }
                 step++;
+                skip_compress: ;
             }
             break;
         case 3:
@@ -477,18 +490,26 @@ void MakeCoffeProcess(void)
                 (step == 3) ? (stage = 0) : (stage = 1);
                 Cmd_WriteMsg(&Pumping_Process_Run, (void*) ModeSelected);
             }
-            if ((InPumping) && (step_status[step] == Finish))
+            if (InPumping)
             {
-                InPumping = 0;
-                step++;
+                if (step_status[step] == Finish)
+                {
+                    InPumping = 0;
+                    step++;
 
+                }
+                if (cancel_cmd)
+                {
+                    step = 0;
+                    Cmd_WriteMsg(&Pumping_Process_Stop, Null);
+                }
             }
             break;
         default:
             InProcess = step = 0;
 
         };
-        CheckProperlyStep();
+        //CheckProperlyStep();
         B_Group_Task = &CheckingFinish_StepInRuning;
     }
 }

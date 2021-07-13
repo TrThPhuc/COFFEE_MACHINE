@@ -88,6 +88,7 @@ uint16_t Blade, Ron;
 
 Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Decatt_1, Mode_Decatt_2; // Mode parameter
 Mode_Parameter_t *ModeSelected;
+bool cancel_cmd = 0;
 // Temperature monitor/GUI
 float Steam_Temp_Gui;
 float HotWater_Temp_Gui;
@@ -403,38 +404,48 @@ void Default_B(void)
 // Task 50ms
 void Default_C(void)
 {
+// ----------------------------------------Button GUI------------------------------//
     // Select mode and make coffe
-    static uint8_t release = 1;
-    if ((InProcess == 0) && (release == 1))
+    static uint8_t release_mode = 1, release = 0;
+    if ((InProcess == 0) && (release_mode == 1))
     {
         if (TCA9539_IC1.TCA9539_Input.all & Decatt1_Bt)
         {
             ModeSelected = &Mode_Decatt_1;
             MakeCoffee();
-            release = 0;
+            release_mode = 0;
 
         }
         else if (TCA9539_IC1.TCA9539_Input.all & Decatt2_Bt)
         {
             ModeSelected = &Mode_Decatt_2;
             MakeCoffee();
-            release = 0;
+            release_mode = 0;
         }
         else if (TCA9539_IC1.TCA9539_Input.all & Expresso1_Bt)
         {
             ModeSelected = &Mode_Espresso_1;
             MakeCoffee();
-            release = 0;
+            release_mode = 0;
         }
         else if (TCA9539_IC1.TCA9539_Input.all & Expresso2_Bt)
         {
             ModeSelected = &Mode_Espresso_2;
             MakeCoffee();
-            release = 0;
+            release_mode = 0;
         }
     }
+    if ((InProcess == 1) && (release == 1))
+    {
+        if (TCA9539_IC1.TCA9539_Input.all & Cancel_Task)
+            cancel_cmd = 1;
+        release = 0;
+    }
     if ((TCA9539_IC1.TCA9539_Input.all & 0x78) == 0)
+        release_mode = 1;
+    if ((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) == 0)
         release = 1;
+
     C_Group_Task = &C1;
 }
 void C1(void)

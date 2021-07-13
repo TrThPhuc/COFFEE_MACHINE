@@ -15,7 +15,7 @@
 #define Expresso2_Bt            0x10
 #define Decatt1_Bt              0x20
 #define Decatt2_Bt              0x40
-#define Bt8                     0x80
+#define Cancel_Task             0x80
 
 #define LED_BT8                 0x100
 #define LED_BT9                 0x200
