@@ -21,8 +21,8 @@
 #include "TCA9539_hw_memmap.h"
 #include "TCA9539.h"
 #define Null 0
-#define MSG_QUEUE_SIZE 5
-#define MSG_QUEUE_ARG_SIZE 5
+#define MSG_QUEUE_SIZE 16
+#define MSG_QUEUE_ARG_SIZE 16
 volatile bool InProcess;
 volatile bool GrindingTriger, InGrinding;
 volatile bool CompressTriger, InCompress;
@@ -32,6 +32,7 @@ volatile bool LevelControlTriger;
 uint32_t VrTimer_Grinding;
 uint32_t VrTimer_Compress;
 uint16_t SpeedDuty_Pump;
+const uint32_t Pos_Compress = 30;
 
 extern volatile uint32_t SetVolume;
 extern volatile bool FinishPumpEvent;
@@ -39,15 +40,15 @@ extern volatile uint32_t totalMilliLitres, MilliLitresBuffer;
 extern void defaultISR(void);
 
 volatile uint8_t stage, HomePeding;
-extern Mode_Parameter_t ModeSelected;
+extern Mode_Parameter_t *ModeSelected;
 
 #define Osmosis_pump        2000
 #define HighPressure_Pump   7999
-#define NumberOfStep  5
+#define NumberOfStep  6
 void (*msg_queue[MSG_QUEUE_SIZE])(void*);
-void *msg_queue_arg[MSG_QUEUE_ARG_SIZE];
+void *msg_queue_arg[MSG_QUEUE_SIZE];
 volatile uint8_t msg_head = 0, msg_tail = 0;
-static uint8_t step;
+volatile uint8_t step;
 bool error_process = false;
 uint8_t step_status[NumberOfStep];
 #define Finish      1
@@ -103,20 +104,22 @@ void Grinding_Process_Run(void *PrPtr)
         Mode_Parameter_t *Mode = (Mode_Parameter_t*) PrPtr;
         GrindingTriger = 0;
         // Set direction motor
-        if (Mode->DirGrinding)
+        if (Mode->DirGrinding)      // Set Direction_BLDC1
             TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
                     & ~(Direction_BLDC1)) | Direction_BLDC1);
         else
+            // Clear Direction_BLDC1
             TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
                     & ~(Direction_BLDC1));
-        // Enable BLDC1
+        // Enable BLDC1 driver
         TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
                 & ~(Enable_BLDC1)) | Enable_BLDC1);
+        // Enable PWM
         PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0,
-                         PWMGenPeriodGet(PWM0_BASE, PWM_GEN_0) - 1);
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 1000); // Max speed
         VrTimer_Grinding = Mode->GrindingDuration;
-        // B_Group_Task = &CheckingFinish_StepInRuning;
+        TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
+        TimerIntEnable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
 
     }
 
@@ -149,7 +152,8 @@ void Compress_Process_Run(void *PrPtr)
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1,  // 50% Duty
                          PWMGenPeriodGet(PWM0_BASE, PWM_GEN_0) / 2);
         VrTimer_Compress = *(uint32_t*) PrPtr;
-        // B_Group_Task = &CheckingFinish_StepInRuning;
+        TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
+        TimerIntEnable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
     }
 }
 void Compress_Process_Stop(void *PrPtr)
@@ -189,6 +193,7 @@ void Pumping_Process_Run(void *PrPtr)
             SetVolume = Mode->AmountOfWaterPumping.stage_2;
         }
         // Initialize a pump envent to calculate volume
+        FinishPumpEvent = false;
         InitPumpingEvent();
         // Set direction
         TCA9539_IC2.TCA9539_Onput.all = ((TCA9539_IC2.TCA9539_Onput.all
@@ -198,6 +203,7 @@ void Pumping_Process_Run(void *PrPtr)
                 & ~(Enable_BLDC3)) | Enable_BLDC3);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, SpeedDuty_Pump);
         PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
+
         B_Group_Task = &CheckingFinish_StepInRuning;
     }
 }
@@ -211,6 +217,7 @@ void Pumping_Process_Stop(void *PrPtr)
         TCA9539_IC2.TCA9539_Onput.all = (TCA9539_IC2.TCA9539_Onput.all
                 & ~(HotWater));
         totalMilliLitres = MilliLitresBuffer;
+        MilliLitresBuffer = 0;
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
         PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
         FinishPumpEvent = true;
@@ -295,80 +302,108 @@ void Read_INT_Handler(void)
      Cmd_WriteMsg((void(*)(void*))TCA9539ReadInputReg, (void*)&TCA9539_IC3);*/
 
 }
+void TimmingPorcess()
+
+{
+    TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
+    if (InGrinding)
+    {
+        if (VrTimer_Grinding != 0)
+            VrTimer_Grinding--;
+        else
+            TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
+
+    }
+
+    if (InCompress)
+    {
+        if (VrTimer_Compress != 0)
+            VrTimer_Compress--;
+        else
+            TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
+    }
+
+}
 void CheckingFinish_StepInRuning()
 {
-    switch (step)
+    if (InProcess)
     {
-    case 0: // Home return
-        if (TCA9539_IC1.TCA9539_Input.all & LinitSwitch)
+        switch (step)
         {
-            Cmd_WriteMsg(&HomeReturn_Process_Stop, Null);
-            step_status[step] = Finish;
+        case 0:
+        case 5: // Home return
+            if (TCA9539_IC1.TCA9539_Input.all & LinitSwitch)
+            {
+                Cmd_WriteMsg(&HomeReturn_Process_Stop, Null);
+                step_status[step] = Finish;
 
-        }
-        break;
-    case 1: // Gringding coffee
-        if (VrTimer_Grinding == 0)
-        {
-            Cmd_WriteMsg(&Grinding_Process_Stop, Null);
-            step_status[step] = Finish;
+            }
+            break;
+        case 1: // Gringding coffee
+            if ((VrTimer_Grinding == 0) && InGrinding)
+            {
+                Cmd_WriteMsg(&Grinding_Process_Stop, Null);
+                step_status[step] = Finish;
 
-        }
-        else
-            VrTimer_Grinding--;
-        break;
-    case 2: // Compress coffee
-        if (VrTimer_Compress == 0)
-        {
-            Cmd_WriteMsg(&Compress_Process_Stop, Null);
-            step_status[step] = Finish;
+            }
+            break;
+        case 2: // Compress coffee
+            if ((VrTimer_Compress == 0) && InCompress)
+            {
+                Cmd_WriteMsg(&Compress_Process_Stop, Null);
+                step_status[step] = Finish;
 
-        }
-        else
-            VrTimer_Compress--;
-        break;
-    case 3: // pump hot water
-        if (FinishPumpEvent)
-        {
+            }
 
-            QEIIntRegister(QEI0_BASE, &defaultISR);
-            QEIDisable(QEI0_BASE);
-            QEIIntDisable(QEI0_BASE, QEI_INTTIMER);
-            step_status[step] = Finish;
+            break;
+        case 3:
+        case 4:   // pump hot water
+            if (FinishPumpEvent)
+            {
 
-        }
-        break;
+                QEIIntDisable(QEI0_BASE, QEI_INTTIMER);
+                step_status[step] = Finish;
+                //   Cmd_WriteMsg(&Pumping_Process_Run, &Pumping_Process_Stop);
 
-    };
+            }
+            break;
+
+        };
+    }
     B_Group_Task = &Default_B;
 
 }
-void CheckProperlyStep(uint8_t step)
+void CheckProperlyStep()
 {
     uint8_t i;
-    for (i = 0; i < NumberOfStep; i++)
+    if (InProcess)
     {
-        if (i < step)
+        for (i = 0; i < NumberOfStep; i++)
         {
-            if (step_status[i] != Finish)
-                error_process = true;
+            if (i < step)
+            {
+                if (step_status[i] != Finish)
+                    error_process = true;
+            }
+            else
+            {
+                if ((step_status[i] != Running) && (step_status[i] != Pending))
+                    error_process = true;
+            }
         }
-        else
+        if (error_process)
         {
-            if ((step_status[i] != Running) || (step_status[i] != Pending))
-                error_process = true;
-        }
-    }
-    if (error_process)
-    {
-        InProcess = 0;
-        PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
-        PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, true);
-        PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
+            error_process = 0;
+            InProcess = 0;
+            step = 0;
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 0);
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0);
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
+            PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);
+            PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, false);
+            PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
 
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 0);
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0);
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
+        }
     }
 }
 void MakeCoffee()
@@ -378,6 +413,7 @@ void MakeCoffee()
     {
         step_status[i] = Pending;
     }
+    InHomeReturn = InGrinding = InCompress = InPumping = 0;
     InProcess = 1;
 
 // B_Group_Task = &MakeCoffeProcess;
@@ -385,34 +421,34 @@ void MakeCoffee()
 
 void MakeCoffeProcess(void)
 {
-//  InProcess = true;
-    CheckProperlyStep(step);
+
     if (!error_process && InProcess)
     {
         switch (step)
         {
         case 0:
-        case 5:
+        case 5: // Home return compress block
             if (!HomePeding && !InHomeReturn)
             {
                 step_status[step] = Running;
                 HomeReturnTriger = InHomeReturn = 1;
                 Cmd_WriteMsg(&HomeReturn_Process_Run, Null);
             }
-            if (step_status[step] == Finish)
+            if ((InHomeReturn) && (step_status[step] == Finish))
             {
                 InHomeReturn = 0;
                 (step == 5) ? (InProcess = step = 0) : (step++);
             }
             break;
-        case 1:
+        case 1: // Grinding coffe
             if (!InGrinding)
             {
                 step_status[step] = Running;
                 GrindingTriger = InGrinding = 1;
-                Cmd_WriteMsg(&Grinding_Process_Run, &ModeSelected);
+                Cmd_WriteMsg(&Grinding_Process_Run, (void*) ModeSelected);
+
             }
-            if (step_status[step] == Finish)
+            if ((InGrinding) && (step_status[step] == Finish))
             {
                 InGrinding = 0;
                 step++;
@@ -423,9 +459,10 @@ void MakeCoffeProcess(void)
             {
                 step_status[step] = Running;
                 InCompress = CompressTriger = 1;
-                Cmd_WriteMsg(&Compress_Process_Run, &ModeSelected);
+                Cmd_WriteMsg(&Compress_Process_Run, (void*) &Pos_Compress);
+
             }
-            if (step_status[step] == Finish)
+            if ((InCompress) && (step_status[step] == Finish))
             {
                 InCompress = 0;
                 step++;
@@ -438,19 +475,20 @@ void MakeCoffeProcess(void)
                 step_status[step] = Running;
                 InPumping = PumpingTriger = 1;
                 (step == 3) ? (stage = 0) : (stage = 1);
-                Cmd_WriteMsg(&Pumping_Process_Run, &ModeSelected);
+                Cmd_WriteMsg(&Pumping_Process_Run, (void*) ModeSelected);
             }
-            if (step_status[step] == Finish)
+            if ((InPumping) && (step_status[step] == Finish))
             {
                 InPumping = 0;
                 step++;
+
             }
             break;
         default:
             InProcess = step = 0;
 
         };
-
+        CheckProperlyStep();
         B_Group_Task = &CheckingFinish_StepInRuning;
     }
 }

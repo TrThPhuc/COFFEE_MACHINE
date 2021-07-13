@@ -30,6 +30,7 @@ extern volatile uint8_t In_TxBrust;
 extern ADS1118_t Steam, Hot_Water;
 ADS1118_t *Temp_ptr;
 // True task 125ms
+extern uint8_t counttest;
 void Temperature_Control(void)
 {
 
@@ -38,7 +39,7 @@ void Temperature_Control(void)
 
         static uint16_t scale = 0;
         TimerIntClear(TIMER3_BASE, TIMER_TIMA_TIMEOUT);
-
+        counttest = scale;
         if (scale >= 4)  // task 0.5s
         {
             scale = 0;
@@ -71,6 +72,7 @@ void Temperature_Control(void)
 
         }
         // Shutdow if overshoot termperature
+/*
         if (Steam.Actual_temperature >= Shutdown_Temp_Steam)
             PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);
         else
@@ -81,6 +83,7 @@ void Temperature_Control(void)
             PWMOutputState(PWM0_BASE, PWM_OUT_4_BIT, true);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3_BIT, (uint32_t) Steam_Vout);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4_BIT, (uint32_t) HotWater_Vout);
+*/
 
         TCA9539_IC1.updateOutputFlag = 1;
         TCA9539_IC2.updateOutputFlag = 1;

@@ -31,6 +31,7 @@
 #define Null 0
 #define Int_SSI0
 //#define Polling_SSI0
+//#define uDma_SSI0
 extern void InitSysClt(void);      // Initialize system & peripheral clock
 void defaultISR(void);      // Default interrupt handler
 void GpioConfigure(void);   //
@@ -85,7 +86,7 @@ uint16_t SumOfCupInUsed = 0;
 uint16_t SumOfCupInUsed_day = 0;
 uint16_t Blade, Ron;
 
-Mode_Parameter_t Espresso_1, Espresso_2, Decatt_1, Decatt_2;  // Mode parameter
+Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Decatt_1, Mode_Decatt_2; // Mode parameter
 Mode_Parameter_t *ModeSelected;
 // Temperature monitor/GUI
 float Steam_Temp_Gui;
@@ -105,9 +106,10 @@ float PressHeating_Temp_Gui;
 void LCD_Interface_Cnf(void);
 void LCD_ST7567_Init(void);
 void Spi0_LCD_Interface_Cnf(void);
-
+uint8_t concac = 0;
 extern void Init_SW_DMA(void);
 extern void Init_SPI_DMA(void);
+extern void Init_LCDSPI_DMA(void);
 //Kernel for Communicate Host to LCD
 void SerialCommsInit(void); // Initialize task
 void SerialHostComms(void); // Task proceessed in period
@@ -125,9 +127,13 @@ uint8_t coeff_change;   // Flag for change parameter in mode
 int16_t VrTimer1[4];    // Virtual timer
 extern const unsigned char ascii_table_5x8[95][5]; // Bit Map for ASCII table (ASCII_Font.c)
 extern void WriteImageToDriverLCD(void *bufferPtr);
+
 uint8_t *LCD_IMAGE_Send, *LCD_IMAGE_Write;
 extern void ReadTxFiFO(void);
 extern void WriteTxFiFO(uint8_t c);
+volatile bool Write_ready = 1;
+extern volatile uint8_t pagelcd;
+uint8_t counttest;
 // ---------------------------- ADS1118 Temperature Sensor ------------------------------------
 ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
@@ -152,6 +158,7 @@ float Calibration; // Coeficient for calculate vollume pump
 uint32_t totalMilliLitres, MilliLitresBuffer;
 uint32_t SetVolume;
 volatile bool FinishPumpEvent = false;
+void QEP_CoffeeMachine_cnf(void);
 void FlowMeterCal(void);
 void InitPumpingEvent(void);
 
@@ -184,11 +191,13 @@ extern void MakeCoffee(void);
 extern void MakeCoffeProcess(void);
 extern bool InProcess;
 uint32_t duty = 100;
+
 void main()
 {
     // Initialize Device/board include:
     // + Disable Wdog timer, Disable interrupt
     // + System clk, Peripheral clock
+    // + Initialize timers
     // + GPIO init
     IntMasterDisable();
     InitSysClt();
@@ -202,6 +211,7 @@ void main()
 
 // ---------------------------------- USER -----------------------------------------
 //=================================================================================
+
 //  Temperature Control terminal assign
     CNTL_2P2Z_DBUFF_t Default = { 0, 0, 0, 0, 0 };
     Steam.Code = ADSCON_CH0;
@@ -248,11 +258,11 @@ void main()
     I2C0_TCA9539_IterruptTrigger_Cnf(); // Configure GPIO interrupt to respone intertupt signal of TCA9539
 
 // ----------------------------------  Configure QEI -----------------------------------------
-
+    QEP_CoffeeMachine_cnf();
     //QEIIntRegister(QEI0_BASE, FlowMeterCal);
     //QEIIntEnable(QEI0_BASE, QEI_INTTIMER);
     // QEIEnable(QEI0_BASE);
-    QEIDisable(QEI0_BASE);
+    //QEIDisable(QEI0_BASE);
 //=================================================================================
 //  INITIALISATION - LCD-Display connections
 //=================================================================================
@@ -262,37 +272,39 @@ void main()
     // Initialize GUI interface
     SerialCommsInit();
     // Assign data stream to Gui variable display LCD - Display on Page 0 LCD
-    dataSentList[0] = &SumOfCupInUsed;
+    dataSentList[0] = &counttest;   //&SumOfCupInUsed;
     dataSentList[1] = &SumOfCupInUsed_day;
     dataSentList[2] = &Blade;
     dataSentList[3] = &Ron;
     //"Set" variables
     //---------------------------------------
     // Assign GUI parameter  to desired  parameter setting addresses
-    Pr_Packet[0] = &Espresso_1.Water;
-    Pr_Packet[1] = &Espresso_1.GrindingDuration;
-    Pr_Packet[2] = &Espresso_1.AmountOfWaterPumping.stage_1;
-    Pr_Packet[3] = &Espresso_1.AmountOfWaterPumping.stage_2;
+    Pr_Packet[0] = &Mode_Espresso_1.Water;
+    Pr_Packet[1] = &Mode_Espresso_1.GrindingDuration;
+    Pr_Packet[2] = &Mode_Espresso_1.AmountOfWaterPumping.stage_1;
+    Pr_Packet[3] = &Mode_Espresso_1.AmountOfWaterPumping.stage_2;
 
-    Pr_Packet[4] = &Espresso_2.Water;
-    Pr_Packet[5] = &Espresso_2.GrindingDuration;
-    Pr_Packet[6] = &Espresso_2.AmountOfWaterPumping.stage_1;
-    Pr_Packet[7] = &Espresso_2.AmountOfWaterPumping.stage_2;
+    Pr_Packet[4] = &Mode_Espresso_2.Water;
+    Pr_Packet[5] = &Mode_Espresso_2.GrindingDuration;
+    Pr_Packet[6] = &Mode_Espresso_2.AmountOfWaterPumping.stage_1;
+    Pr_Packet[7] = &Mode_Espresso_2.AmountOfWaterPumping.stage_2;
 
-    Pr_Packet[8] = &Decatt_1.Water;
-    Pr_Packet[9] = &Decatt_1.GrindingDuration;
-    Pr_Packet[10] = &Decatt_1.AmountOfWaterPumping.stage_1;
-    Pr_Packet[11] = &Decatt_1.AmountOfWaterPumping.stage_2;
+    Pr_Packet[8] = &Mode_Decatt_1.Water;
+    Pr_Packet[9] = &Mode_Decatt_1.GrindingDuration;
+    Pr_Packet[10] = &Mode_Decatt_1.AmountOfWaterPumping.stage_1;
+    Pr_Packet[11] = &Mode_Decatt_1.AmountOfWaterPumping.stage_2;
 
-    Pr_Packet[12] = &Decatt_2.Water;
-    Pr_Packet[13] = &Decatt_2.GrindingDuration;
-    Pr_Packet[14] = &Decatt_2.AmountOfWaterPumping.stage_1;
-    Pr_Packet[15] = &Decatt_2.AmountOfWaterPumping.stage_2;
+    Pr_Packet[12] = &Mode_Decatt_2.Water;
+    Pr_Packet[13] = &Mode_Decatt_2.GrindingDuration;
+    Pr_Packet[14] = &Mode_Decatt_2.AmountOfWaterPumping.stage_1;
+    Pr_Packet[15] = &Mode_Decatt_2.AmountOfWaterPumping.stage_2;
 
     Calibration = (float) 2 / 15.0;
     // Assign direction motor of grind module
-    Espresso_1.DirGrinding = Espresso_2.DirGrinding = true;
-    Decatt_1.DirGrinding = Decatt_2.DirGrinding = false;
+    Mode_Espresso_1.DirGrinding = Mode_Espresso_2.DirGrinding = true;
+    Mode_Decatt_1.DirGrinding = Mode_Decatt_2.DirGrinding = false;
+//=============================Configure machine Parameter ========================================
+    ParameterDefaultSetting();
 
     //  SetVolume = 200;
     //  InitPumpingEvent();
@@ -301,16 +313,19 @@ void main()
     TimerEnable(TIMER1_BASE, TIMER_A);
     TimerEnable(TIMER2_BASE, TIMER_A);
     TimerEnable(TIMER3_BASE, TIMER_A);
+    TimerEnable(TIMER4_BASE, TIMER_A);
 
 //Clear interrupt Flag & enable interrupt (CPU level)
     TimerIntClear(TIMER3_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
+    TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
+    // TimerIntEnable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
     IntMasterEnable();
 
     while (1)
     {
+
         Ptr_Task();
         Cmd_ReadMsg();
-
     }
 }
 // Task 2ms
@@ -382,33 +397,44 @@ void Default_B(void)
 
     if (InProcess)
         B_Group_Task = &MakeCoffeProcess;
+    else
+        B_Group_Task = &Default_B;
 }
 // Task 50ms
 void Default_C(void)
 {
-    if (InProcess == 0)
+    // Select mode and make coffe
+    static uint8_t release = 1;
+    if ((InProcess == 0) && (release == 1))
     {
         if (TCA9539_IC1.TCA9539_Input.all & Decatt1_Bt)
         {
-            ModeSelected = &Decatt_1;
+            ModeSelected = &Mode_Decatt_1;
             MakeCoffee();
+            release = 0;
+
         }
         else if (TCA9539_IC1.TCA9539_Input.all & Decatt2_Bt)
         {
-            ModeSelected = &Decatt_2;
+            ModeSelected = &Mode_Decatt_2;
             MakeCoffee();
+            release = 0;
         }
         else if (TCA9539_IC1.TCA9539_Input.all & Expresso1_Bt)
         {
-            ModeSelected = &Espresso_1;
+            ModeSelected = &Mode_Espresso_1;
             MakeCoffee();
+            release = 0;
         }
-        else if (TCA9539_IC1.TCA9539_Input.all & Expresso1_Bt)
+        else if (TCA9539_IC1.TCA9539_Input.all & Expresso2_Bt)
         {
-            ModeSelected = &Espresso_2;
+            ModeSelected = &Mode_Espresso_2;
             MakeCoffee();
+            release = 0;
         }
     }
+    if ((TCA9539_IC1.TCA9539_Input.all & 0x78) == 0)
+        release = 1;
     C_Group_Task = &C1;
 }
 void C1(void)
@@ -430,29 +456,38 @@ void Spi0_LCD_Interface_Cnf()
     // COnfige Mode 0 SSI, Freq = 100Khz, 8Bit
     SSIConfigSetExpClk(SSI0_BASE, 80000000, SSI_FRF_MOTO_MODE_0,
     SSI_MODE_MASTER,
-                       20000000, 8);
+                       15000000, 8);
 #ifdef Int_SSI0
     SSIIntRegister(SSI0_BASE, &ReadTxFiFO);
     SSIIntEnable(SSI0_BASE, SSI_TXFF);
 #endif
+#ifdef uDma_SSI0
+    SSIIntRegister(SSI0_BASE, &ReadTxFiFO);
+    // SSIIntEnable(SSI0_BASE, SSI_TXFF);
+    SSIIntEnable(SSI0_BASE, SSI_DMATX);
+    IntEnable(INT_UDMA);    // sw
+    IntEnable(INT_SSI0);
+    uDMAEnable();
+    Init_LCDSPI_DMA();
+    Init_SW_DMA();
+
+#endif
+
     //SSILoopbackEnable(SSI0_BASE);
 
 }
 void LCD_Interface_Cnf()
 {
     Spi0_LCD_Interface_Cnf();
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
     IntEnable(INT_SSI0);
-    //uDMAEnable();
-    // Init_SW_DMA();
-    //Init_SPI_DMA();
+
     // Configurate Pin for proper ssi
     GPIOPinTypeSSI(GPIO_PORTA_BASE,
     GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
     SSIEnable(SSI0_BASE);
 
     // Configurate Pin for other
-    /*    GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_STRENGTH_12MA,
+    /* GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_STRENGTH_12MA,
      GPIO_PIN_TYPE_STD_WPU);*/
     GPIOPadConfigSet(GPIO_PORTA_BASE, GPIO_PIN_6, GPIO_STRENGTH_12MA, //PA6 - LCD_RST
                      GPIO_PIN_TYPE_STD_WPU);
@@ -472,13 +507,13 @@ void LCD_Interface_Cnf()
 void LCD_Write_Cmd(uint8_t cmd)
 {
     CLR_RS;
-#ifdef Polling_SSI0
+#if (defined Polling_SSI0) || (defined uDma_SSI0)
     SSIDataPut(SSI0_BASE, (uint32_t) cmd);
     while (SSIBusy(SSI0_BASE))  // Polling method
     {
     }
 #endif
-#ifdef Int_SSI0
+#if (defined Int_SSI0)
     SSIIntEnable(SSI0_BASE, SSI_TXFF);
     WriteTxFiFO(cmd);
 #endif
@@ -487,8 +522,8 @@ void LCD_Write_Cmd(uint8_t cmd)
 void LCD_Write_Dat(uint8_t cmd)
 {
 
-    SET_RS;
 #ifdef Polling_SSI0
+    SET_RS;
     SSIDataPut(SSI0_BASE, (uint32_t) cmd);
     while (SSIBusy(SSI0_BASE))  // polling method
     {
@@ -496,10 +531,14 @@ void LCD_Write_Dat(uint8_t cmd)
     //  SSIDataGet(SSI0_BASE, (uint32_t*) &rdata);     // read dummy data
 #endif
 #ifdef uDma_SSI0
-
+    if ((!uDMAChannelIsEnabled(UDMA_CHANNEL_SSI0TX)) && (pagelcd == 0)){
+    LCD_Address_Set(1, 1);
+    SET_RS;
     WriteImageToDriverLCD(LCD_IMAGE_Send);
+    }
 #endif
 #ifdef Int_SSI0
+    SET_RS;
     SSIIntEnable(SSI0_BASE, SSI_TXFF);
     WriteTxFiFO(cmd);
 #endif
@@ -516,8 +555,9 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
 {
 
     uint8_t i = 0, j, k;
+    // static uint16_t index = 0;
+    //index = (page - 1) * 128 + (column - 1);
 
-    //index = 600;
     while (text[i] > 0x00)
     {
 
@@ -535,16 +575,16 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
             column += 5;
 #endif
 #ifdef uDma_SSI0
-            static uint16_t index = 0;
 
-                for (k = 0; k < 5; k++)
-                {
-                    LCD_IMAGE_Write[index] = (uint8_t) ascii_table_5x8[15][k];
-                    index++;
-                    if(index >= 1024)   index = 0;
-                }
-                i++;
-                column += 5;
+            for (k = 0; k < 5; k++)
+            {
+                LCD_IMAGE_Write[index] = (uint8_t) ascii_table_5x8[j][k];
+                index++;
+                if (index >= 1024)
+                    index = 0;
+            }
+            i++;
+            column += 5;
 
 #endif
         }
@@ -573,7 +613,7 @@ void LCD_ST7567_Init()
     SysCtlDelay(133333);
     LCD_Write_Cmd(0x2E);
     SysCtlDelay(133333);
-    LCD_Write_Cmd(0x2F);
+    LCD_Write_Cmd(0x2F);    //
     SysCtlDelay(133333);
     LCD_Write_Cmd(0xA6);
 
@@ -588,12 +628,13 @@ void LCD_ST7567_Init()
 
     LCD_Write_Cmd(0x40);
 
-    LCD_Write_Cmd(0xC8);
+    LCD_Write_Cmd(0xC8);    //
     LCD_Write_Cmd(0xA0);
 
-    LCD_Write_Cmd(0xAF);
+    LCD_Write_Cmd(0xAF);    //
 
-    LCD_Write_Cmd(0x7f);
+    //LCD_Write_Cmd(0x41);
+
     SysCtlDelay(2666666);
 // SET_CS;
 // LIGHT_ON;
@@ -639,7 +680,7 @@ void ADS1118_Coms(uint16_t config, int mode)
     config = config | 0x8000;
     ui16TxBuf[0] = config;
     ui16TxBuf[1] = config;
- //   Settingconfig = ((ui16TxBuf[0] & 0x7FFF) | 0x01);
+    //   Settingconfig = ((ui16TxBuf[0] & 0x7FFF) | 0x01);
     uDMAChannelEnable(UDMA_CHANNEL_SSI1TX);
     uDMAChannelEnable(UDMA_CHANNEL_SSI1RX);
 
@@ -677,7 +718,7 @@ void Spi1_ADS1118_Interface_Cnf()
     GPIOPinConfigure(GPIO_PF0_SSI1RX);
     GPIOPinConfigure(GPIO_PF1_SSI1TX);
     SSIClockSourceSet(SSI1_BASE, SSI_CLOCK_SYSTEM);
-// COnfige Mode 0 SSI, Freq = 100Khz, 8Bit
+// Confige Mode 0 SSI, Freq = 100Khz, 8Bit
     SSIConfigSetExpClk(SSI1_BASE, 80000000, SSI_FRF_MOTO_MODE_1,
     SSI_MODE_MASTER,
                        2500000, 16);
@@ -687,7 +728,7 @@ void Spi1_ADS1118_Interface_Cnf()
     SSIIntRegister(SSI1_BASE, &SSI1_IntHandler);
     SSIIntEnable(SSI1_BASE, SSI_DMATX);
     SSIIntEnable(SSI1_BASE, SSI_DMARX);
-    IntEnable(INT_SSI1);
+    IntEnable(INT_SSI1); //
     uDMAEnable();
     Init_SPI_DMA();
     SSIEnable(SSI1_BASE);

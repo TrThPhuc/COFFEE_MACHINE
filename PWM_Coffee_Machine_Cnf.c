@@ -43,20 +43,39 @@ void PWMDRV_Coffee_machine_cnf(void)
 // Configure Pin mux
     GPIOPinConfigure(GPIO_PB6_M0PWM0);  // Grinding motor - Generation 0
     GPIOPinConfigure(GPIO_PB7_M0PWM1);  // Comress Motor - Generation 0
-    GPIOPinConfigure(GPIO_PB4_M0PWM2);  // Pumping motor  - Generation 1
 
+    GPIOUnlockPin(GPIO_PORTB_BASE, GPIO_PIN_4);
+    GPIOUnlockPin(GPIO_PORTB_BASE, GPIO_PIN_5);
+    GPIOPinConfigure(GPIO_PB4_M0PWM2);  // Pumping motor  - Generation 1
     GPIOPinConfigure(GPIO_PB5_M0PWM3);  // Out SSR Steam -  Generation 1
+
     GPIOPinConfigure(GPIO_PE4_M0PWM4);  // Out SSR Hot water
     GPIOPinConfigure(GPIO_PE5_M0PWM5);  // Out SSR Compress
 // Configure Pin type
-    GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6); // Comress Motor - Generation 0
-    GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_7); // Pumping motor  - Generation 0
+    GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6); // Grinding motor - Generation 0
+    GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_7); // Comress Motor   - Generation 0
 
-    GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_4); // Grinding motor - Generation 1
+    GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_4); // Pumping motor - Generation 1
     GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_5); // Out SSR Steam  - Generation 1
 
     GPIOPinTypePWM(GPIO_PORTE_BASE, GPIO_PIN_4); // Out SSR Steam  - Generation 1
     GPIOPinTypePWM(GPIO_PORTE_BASE, GPIO_PIN_5); // Out SSR Steam  - Generation 1
+
+    ///////////////test
+    /*    GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_0, GPIO_DIR_MODE_OUT);
+     GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_DIR_MODE_OUT);
+     GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_2, GPIO_DIR_MODE_OUT);
+
+     GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_0, GPIO_STRENGTH_2MA,
+     GPIO_PIN_TYPE_STD);
+     GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_STRENGTH_2MA,
+     GPIO_PIN_TYPE_STD);
+     GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_2, GPIO_STRENGTH_2MA,
+     GPIO_PIN_TYPE_STD);
+
+     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_0, 0);
+     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, 0);
+     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, 0);*/
 
 //-------------------------Generation 2-----------------------------------
     PWMGenConfigure(PWM0_BASE, PWM_GEN_2,
@@ -73,17 +92,21 @@ void PWMDRV_Coffee_machine_cnf(void)
 
 //-------------------------Generation 1-----------------------------------
     PWMGenConfigure(PWM0_BASE, PWM_GEN_1,
-    PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC);
+    PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC | PWM_GEN_MODE_DBG_RUN);
 
-    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, 80000);    // Freq = 10Khz
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);      // PB4 - Intialize Duty = 0%
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, 8000);     // Freq = 10Khz
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, 0);
 
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
     PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);
 
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
+/*    uint32_t temp = PWMGenPeriodGet(PWM0_BASE, PWM_GEN_1);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 7999);
+    PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);*/
 //-------------------------Generation 0-----------------------------------
+    // Grinding motor & Comress Motor
     PWMGenConfigure(PWM0_BASE, PWM_GEN_0,
     PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC);
 

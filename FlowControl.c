@@ -28,6 +28,7 @@ extern volatile bool FinishPumpEvent;
 extern float Calibration;
 
 extern void Pumping_Process_Stop(void *PrPtr);
+void FlowMeterCal(void);
 void QEP_CoffeeMachine_cnf(void)
 {
     QEIDisable(QEI0_BASE);
@@ -49,7 +50,10 @@ void QEP_CoffeeMachine_cnf(void)
             & ~(QEI_CTL_INVI)) | QEI_CTL_INVI);
     QEIVelocityConfigure(QEI0_BASE, QEI_VELDIV_16, 500000);
     QEIVelocityEnable(QEI0_BASE);
-    QEIDisable(QEI0_BASE);
+    QEIIntRegister(QEI0_BASE, &FlowMeterCal);
+    uint32_t status = QEIIntStatus(QEI0_BASE, true);
+    QEIIntClear(QEI0_BASE, status);
+    QEIEnable(QEI0_BASE);
 
 }
 void FlowMeterCal()
@@ -59,8 +63,8 @@ void FlowMeterCal()
         QEIIntClear(QEI0_BASE, QEI_INTTIMER);
         uint32_t temp;
         temp = QEIPositionGet(QEI0_BASE);
-        MilliLitresBuffer = (float) temp * Calibration;
-        if (MilliLitresBuffer >= SetVolume)
+        // MilliLitresBuffer = (float) temp * Calibration;
+        if ((MilliLitresBuffer >= SetVolume) && (FinishPumpEvent == false))
         {
             // Stop pumping(direct call for accuracy)
             Pumping_Process_Stop(Null);
@@ -73,7 +77,8 @@ void InitPumpingEvent(void)
 {
     MilliLitresBuffer = 0;
     QEIPositionSet(QEI0_BASE, 0x0000);
-    QEIIntRegister(QEI0_BASE, &FlowMeterCal);
+    ;
+    QEIIntClear(QEI0_BASE, QEI_INTTIMER);
     QEIIntEnable(QEI0_BASE, QEI_INTTIMER);  // Init interrupt timer out
-    QEIEnable(QEI0_BASE);
+
 }

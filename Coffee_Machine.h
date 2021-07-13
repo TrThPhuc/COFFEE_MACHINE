@@ -42,5 +42,5 @@ typedef struct Mode_Parameter
     bool DirGrinding;
 
 } Mode_Parameter_t;
-
+void ParameterDefaultSetting();
 #endif /* COFFEE_MACHINE_H_ */

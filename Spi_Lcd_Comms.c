@@ -33,6 +33,7 @@ extern TCA9539Regs TCA9539_IC1;
 #define Kernel_LCD_pr
 #define NumOfPage       9
 #define InitPageDisplay 3
+//#define uDma_SSI0
 // ---------------------Shared function prototypes of Interface LCD -------------------------------
 extern void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column,
                          uint8_t *text);
@@ -41,10 +42,13 @@ extern void LCD_Write_Cmd(uint8_t cmd);
 extern void LCD_Write_Data(uint8_t cmd);
 
 extern uint8_t coeff_change;
+#ifdef uDma_SSI0
 extern uint8_t *LCD_IMAGE_Send, *LCD_IMAGE_Write;
-extern uint8_t LCD_IMAGE_Pri[1024];
-extern uint8_t LCD_IMAGE_Sec[1024];
-extern volatile uint8_t currentBuffer;
+extern uint8_t LCD_IMAGE_Pri[];
+extern uint8_t LCD_IMAGE_Sec[];
+#endif
+volatile uint8_t currentcount = 0;
+
 // -------------------------------- KERNEL -------------------------------------
 extern void SerialCommsInit(void);
 extern void SerialHostComms(void);
@@ -454,25 +458,25 @@ void PageDisplay()
 
     }
 #ifdef uDma_SSI0
-    if (VrTimer1[0] > 10) // refesh page
+    if (VrTimer1[0] > 5) // refesh page
     {
         VrTimer1[0] = 0;
-        if (currentBuffer == 0)
+        if (currentcount == 0)
         {
             LCD_IMAGE_Send = LCD_IMAGE_Pri;
             LCD_IMAGE_Write = LCD_IMAGE_Sec;
-            currentBuffer = 1;
+            currentcount = 1;
 
         }
 
         else
         {
-            currentBuffer = 0;
+            currentcount = 0;
             LCD_IMAGE_Send = LCD_IMAGE_Sec;
             LCD_IMAGE_Write = LCD_IMAGE_Pri;
 
         }
-        clearBuffer((void*) LCD_IMAGE_Write);
+      clearBuffer((void*) LCD_IMAGE_Write);
         LCD_Write_Dat(0);
         (*PagePointer)();
 
@@ -482,7 +486,7 @@ void PageDisplay()
         VrTimer1[0]++;
     }
 #endif
-      (*PagePointer)();
+   (*PagePointer)();
     LCD_TaskPointer = &CmdInterpreter;
 
 }
@@ -490,10 +494,10 @@ void PageDisplay()
 void Page0_Display(void)
 {
     Str_Display = "Time";
-    Disp_Str_5x8(1, 80, (uint8_t*) Str_Display);
+    Disp_Str_5x8(1, 50, (uint8_t*) Str_Display);
 
     Str_Display = "Ten nha san xuat: ";
-    Disp_Str_5x8(3, 10, (uint8_t*) Str_Display);
+    Disp_Str_5x8(2, 1, (uint8_t*) Str_Display);
     Str_Display = "Trang thai";
     Disp_Str_5x8(5, 10, (uint8_t*) Str_Display);
 
@@ -506,7 +510,7 @@ void Page0_Display(void)
     Str_Display = "Tong ly:";
     Disp_Str_5x8(7, 90, (uint8_t*) Str_Display);
     fflush(stdout);
-    sprintf(Str_Temp, "%d", *dataSentList[1]);
+    sprintf(Str_Temp, "%d   ", *dataSentList[1]);
     Disp_Str_5x8(8, 90, (uint8_t*) Str_Temp);
 
 }
