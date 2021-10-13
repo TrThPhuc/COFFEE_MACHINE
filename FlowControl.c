@@ -22,7 +22,9 @@
 #define Null 0
 #endif
 
-extern uint32_t totalMilliLitres, MilliLitresBuffer;
+#define QEIVelTimer100m 8000000
+
+extern volatile uint32_t totalMilliLitres, MilliLitresBuffer;
 extern uint32_t SetVolume;
 extern volatile bool FinishPumpEvent;
 extern float Calibration;
@@ -44,11 +46,11 @@ void QEP_CoffeeMachine_cnf(void)
                      GPIO_PIN_TYPE_STD_WPD);
 // Confiure QEI
     QEIConfigure(QEI0_BASE,
-    QEI_CONFIG_NO_RESET | QEI_CONFIG_CLOCK_DIR | QEI_CONFIG_NO_SWAP,
+    QEI_CONFIG_NO_RESET | QEI_CONFIG_CLOCK_DIR | QEI_CONFIG_NO_SWAP, // PD7 Dir, PD6 Clock
                  0xFFFFFFFF);
     HWREG(QEI0_BASE + QEI_O_CTL) = ((HWREG(QEI0_BASE + QEI_O_CTL)
-            & ~(QEI_CTL_INVI)) | QEI_CTL_INVI);
-    QEIVelocityConfigure(QEI0_BASE, QEI_VELDIV_16, 500000);
+            & ~(QEI_CTL_INVI)) | QEI_CTL_INVI);     // Invert Index Pulse
+    QEIVelocityConfigure(QEI0_BASE, QEI_VELDIV_1, QEIVelTimer100m);
     QEIVelocityEnable(QEI0_BASE);
     QEIIntRegister(QEI0_BASE, &FlowMeterCal);
     uint32_t status = QEIIntStatus(QEI0_BASE, true);
@@ -63,10 +65,10 @@ void FlowMeterCal()
         QEIIntClear(QEI0_BASE, QEI_INTTIMER);
         uint32_t temp;
         temp = QEIPositionGet(QEI0_BASE);
-        // MilliLitresBuffer = (float) temp * Calibration;
+        MilliLitresBuffer = (float) temp * Calibration;
         if ((MilliLitresBuffer >= SetVolume) && (FinishPumpEvent == false))
         {
-            // Stop pumping(direct call for accuracy)
+            // Stop pumping direct not through swept function
             Pumping_Process_Stop(Null);
         }
     }
@@ -76,9 +78,8 @@ void InitPumpingEvent(void)
 
 {
     MilliLitresBuffer = 0;
-    QEIPositionSet(QEI0_BASE, 0x0000);
-    ;
-    QEIIntClear(QEI0_BASE, QEI_INTTIMER);
+    QEIPositionSet(QEI0_BASE, 0x0000);      // Initalize
+    QEIIntClear(QEI0_BASE, QEI_INTTIMER);   // Clear any interrupt flag
     QEIIntEnable(QEI0_BASE, QEI_INTTIMER);  // Init interrupt timer out
 
 }

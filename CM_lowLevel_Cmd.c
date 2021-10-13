@@ -34,15 +34,16 @@ uint32_t VrTimer_Compress;
 uint16_t SpeedDuty_Pump;
 const uint32_t Pos_Compress = 80;
 
-extern volatile uint32_t SetVolume;
+extern uint32_t SetVolume;
 extern volatile bool FinishPumpEvent;
 extern volatile uint32_t totalMilliLitres, MilliLitresBuffer;
 extern void defaultISR(void);
 
-volatile uint8_t stage, HomePeding;
+volatile uint8_t stage;
 extern Mode_Parameter_t *ModeSelected;
 
-#define Osmosis_pump        4000
+#define HomePeding  (TCA9539_IC1.TCA9539_Input.all & LinitSwitch)
+#define Osmosis_pump        3000
 #define HighPressure_Pump   7999
 #define NumberOfStep  6
 void (*msg_queue[MSG_QUEUE_SIZE])(void*);
@@ -56,12 +57,12 @@ uint8_t step_status[NumberOfStep];
 #define Pending      3
 
 extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
-extern void defaultFunction();
+
 extern void (*B_Group_Task)(void);
 extern void Default_B(void);
 extern uint32_t clockrate;
 extern bool readinput;
-extern bool cancel_cmd;
+extern bool cancel_cmd; // Cancel button
 
 extern void InitPumpingEvent();
 extern void TCA9539ReadInputReg_BrustSlave(TCA9539Regs **RegsA);
@@ -94,7 +95,7 @@ void Cmd_ReadMsg(void)
     {
         ++msg_head;
     }
-    skip: asm(" nop");
+    skip: asm("nop:");
 }
 
 void Grinding_Process_Run(void *PrPtr)
@@ -297,11 +298,6 @@ void Read_INT_Handler(void)
     TCA9539_IC1.ReadCmdFlag = 1;
     TCA9539_IC2.ReadCmdFlag = 1;
     TCA9539_IC3.ReadCmdFlag = 1;
-
-    /*   Cmd_WriteMsg((void(*)(void*))TCA9539ReadInputReg, (void*)&TCA9539_IC1);
-     Cmd_WriteMsg((void(*)(void*))TCA9539ReadInputReg, (void*)&TCA9539_IC2);
-     Cmd_WriteMsg((void(*)(void*))TCA9539ReadInputReg, (void*)&TCA9539_IC3);*/
-
 }
 void TimmingPorcess()
 
@@ -363,10 +359,8 @@ void CheckingFinish_StepInRuning()
         case 4:   // pump hot water
             if (FinishPumpEvent)
             {
-
                 QEIIntDisable(QEI0_BASE, QEI_INTTIMER);
                 step_status[step] = Finish;
-                //   Cmd_WriteMsg(&Pumping_Process_Run, &Pumping_Process_Stop);
 
             }
             break;
@@ -440,7 +434,6 @@ void MakeCoffeProcess(void)
             if ((InHomeReturn) && (step_status[step] == Finish))
             {
                 InHomeReturn = 0;
-
                 ((step == 5) || (cancel_cmd)) ?
                         (InProcess = step = 0, cancel_cmd = 0) : (step++);
             }

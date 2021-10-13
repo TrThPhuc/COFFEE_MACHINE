@@ -33,89 +33,87 @@
 void PWMDRV_Coffee_machine_cnf(void)
 {
 
-#ifndef PWM_CLOK
+#ifndef PWM_CLOCK
     SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
 
 #endif
-#ifndef GPIOB_CLOK
+#ifndef GPIOB_CLOCK
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
 #endif
 // Configure Pin mux
     GPIOPinConfigure(GPIO_PB6_M0PWM0);  // Grinding motor - Generation 0
     GPIOPinConfigure(GPIO_PB7_M0PWM1);  // Comress Motor - Generation 0
-
-    GPIOUnlockPin(GPIO_PORTB_BASE, GPIO_PIN_4);
+//------------------------------------------------------------------------------
+    GPIOUnlockPin(GPIO_PORTB_BASE, GPIO_PIN_4); // Unclock pin
     GPIOUnlockPin(GPIO_PORTB_BASE, GPIO_PIN_5);
-    GPIOPinConfigure(GPIO_PB4_M0PWM2);  // Pumping motor  - Generation 1
-    GPIOPinConfigure(GPIO_PB5_M0PWM3);  // Out SSR Steam -  Generation 1
 
-    GPIOPinConfigure(GPIO_PE4_M0PWM4);  // Out SSR Hot water
-    GPIOPinConfigure(GPIO_PE5_M0PWM5);  // Out SSR Compress
+    GPIOPinConfigure(GPIO_PB4_M0PWM2);  // Pumping motor  - Generation 1
+    // GPIOPinConfigure(GPIO_PB5_M0PWM3);  // Out SSR1 Steam -  Generation 1(Not used PWM module)
+//------------------------------------------------------------------------------
+    // GPIOPinConfigure(GPIO_PE4_M0PWM4);  // Out SSR2 Hot water - Generation 2 (Not used PWM module)
+    // GPIOPinConfigure(GPIO_PE5_M0PWM5);  // Out SSR3 Compress - Generation 2 (Not used PWM module)
+
 // Configure Pin type
     GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6); // Grinding motor - Generation 0
     GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_7); // Comress Motor   - Generation 0
+    GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_6 | GPIO_PIN_7,
+                     GPIO_STRENGTH_8MA,
+                     GPIO_PIN_TYPE_STD);
 
     GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_4); // Pumping motor - Generation 1
-    GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_5); // Out SSR Steam  - Generation 1
+    //  GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_5); // Out SSR1 Steam  - Generation 1
 
-    GPIOPinTypePWM(GPIO_PORTE_BASE, GPIO_PIN_4); // Out SSR Steam  - Generation 1
-    GPIOPinTypePWM(GPIO_PORTE_BASE, GPIO_PIN_5); // Out SSR Steam  - Generation 1
+    //  GPIOPinTypePWM(GPIO_PORTE_BASE, GPIO_PIN_4); // Out SSR2 Steam  - Generation 2
+    //  GPIOPinTypePWM(GPIO_PORTE_BASE, GPIO_PIN_5); // Out SSR3 Steam  - Generation 2
 
-    ///////////////test
-    /*    GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_0, GPIO_DIR_MODE_OUT);
-     GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_DIR_MODE_OUT);
-     GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_2, GPIO_DIR_MODE_OUT);
+// Used for low frequency pwm generation
+    GPIODirModeSet(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_DIR_MODE_OUT);
+    GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_4 | GPIO_PIN_5, GPIO_DIR_MODE_OUT);
 
-     GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_0, GPIO_STRENGTH_2MA,
-     GPIO_PIN_TYPE_STD);
-     GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_STRENGTH_2MA,
-     GPIO_PIN_TYPE_STD);
-     GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_2, GPIO_STRENGTH_2MA,
-     GPIO_PIN_TYPE_STD);
+    GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_STRENGTH_8MA,
+    GPIO_PIN_TYPE_STD);
+    GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_4 | GPIO_PIN_5,
+                     GPIO_STRENGTH_8MA,
+                     GPIO_PIN_TYPE_STD);
 
-     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_0, 0);
-     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, 0);
-     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, 0);*/
-
-//-------------------------Generation 2-----------------------------------
-    PWMGenConfigure(PWM0_BASE, PWM_GEN_2,
+//-------------------------Generation 2 - f = 1Khz-----------------------------------
+// SSR 2 - SSR3
+ /*   PWMGenConfigure(PWM0_BASE, PWM_GEN_2,
     PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC);
 
-    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_2, 80000);    // Freq = 10Khz
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4, 0);      // PB4 - Intialize Duty = 0%
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_5, 0);
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_2, 80000);   // Freq = 10Khz
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4, 0); // PE4 - Intialize Duty = 0%    // SSR2
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_5, 0); // PE5 - Intialize Duty = 0%    // SSR3
 
-    PWMOutputState(PWM0_BASE, PWM_OUT_4_BIT, false);
-    PWMOutputState(PWM0_BASE, PWM_OUT_5_BIT, false);
+    PWMOutputState(PWM0_BASE, PWM_OUT_4_BIT, false);    // Disable output
+    PWMOutputState(PWM0_BASE, PWM_OUT_5_BIT, false);    // Disable output
 
-    PWMGenEnable(PWM0_BASE, PWM_GEN_2);
+    PWMGenEnable(PWM0_BASE, PWM_GEN_2);*/
 
-//-------------------------Generation 1-----------------------------------
+//-------------------------Generation 1 - f = 10Kh-----------------------------------
+    //pumping motor & SSR
     PWMGenConfigure(PWM0_BASE, PWM_GEN_1,
     PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC | PWM_GEN_MODE_DBG_RUN);
 
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, 8000);     // Freq = 10Khz
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, 0);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0); // PB4 - Intialize Duty = 0%    //pumping moto
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, 0); // PB5 - Intialize Duty = 0%    //SSR1
 
-    PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
-    PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);
+    PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);    // Disable output
+    PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);    // Disable output
 
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
-/*    uint32_t temp = PWMGenPeriodGet(PWM0_BASE, PWM_GEN_1);
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 7999);
-    PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);*/
-//-------------------------Generation 0-----------------------------------
+//-------------------------Generation 0 - f = 10Kh------------------------------------
     // Grinding motor & Comress Motor
     PWMGenConfigure(PWM0_BASE, PWM_GEN_0,
     PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC);
 
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 8000);    // Freq = 10Khz
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 0);      // PB6 - Intialize Duty = 0%
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0);      // PB7 - Intialize Duty = 0%
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 0); // PB6 - Intialize Duty = 0%    Grinding motor
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0); // PB7 - Intialize Duty = 0%    Comress Motor
 
-    PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);
-    PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, false);
+    PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);    // Disable output
+    PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, false);    // Disable output
 
     PWMGenEnable(PWM0_BASE, PWM_GEN_0);
 }

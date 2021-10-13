@@ -9,7 +9,7 @@
 #define TCA9539_H_
 
 #include "stdbool.h"
-#define interrupt_method
+#define interrupt_method    // Using interrupt method
 //#define Polling_method
 /************************** I2C Address ***************************************/
 #define TCA9539_ADDRESS     0x74        // I2C Address 1101 A1A2 + R/W
@@ -127,13 +127,23 @@ typedef struct
     bool ReadCmdFlag;
 
 } TCA9539Regs;
+#define Address_IC1  0x74   // A0 = 0  A1 = 0
+#define Address_IC2  0x75   // A0 = 1  A1 = 0
+#define Address_IC3  0x77   // A0 = 1  A1 = 1
+
+#define InitalOutput_IC1 0xFF
+#define InitalOutput_IC2 0x00
+#define InitalOutput_IC3 0x00
+
+//#define LoopBackTest
+
 void TCA9539WriteConfig(TCA9539Regs *Regs);
 void TCA9539WriteOutput(TCA9539Regs *Regs);
 void TCA9539WritePolarity(TCA9539Regs *Regs);
 
 void TCA9539WriteOutput_BrustSlave(TCA9539Regs **RegsA);
 
-void TCA9539InitDefault(TCA9539Regs *Regs);
+//void TCA9539InitDefault(TCA9539Regs *Regs);
 void TCA9539Init(TCA9539Regs *Regs);
 void TCA9539ReadInputReg(TCA9539Regs *Regs);
 

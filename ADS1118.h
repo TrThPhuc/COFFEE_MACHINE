@@ -44,9 +44,9 @@ typedef struct ADS1118
 #define ADS1118_CNVRDY         (0x0001)         //
 
 //Set the configuration to AIN0/AIN1, FS=+/-0.256, SS, DR=128sps, PULLUP on DOUT
-#define ADSCON_CH0      (0x8B8A)
+#define ADSCON_CH0      (0x8B2A) // 0x8B8A
 //Set the configuration to AIN2/AIN3, FS=+/-0.256, SS, DR=128sps, PULLUP on DOUT
-#define ADSCON_CH1      (0xBB8A)
+#define ADSCON_CH1      (0xBB2A)    //0xBB8A
 
 void ADS_Config(unsigned int mode);
 void WriteSPI(uint16_t config, int16_t mode);

@@ -8,9 +8,11 @@
 #ifndef COFFEE_MACHINE_H_
 #define COFFEE_MACHINE_H_
 
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "inc/hw_memmap.h"
 #include "inc/hw_qei.h"
@@ -29,6 +31,11 @@
 #include "driverlib/timer.h"
 #include "driverlib/interrupt.h"
 #include "driverlib/udma.h"
+#include "driverlib/eeprom.h"
+
+// System define
+#define SysCltEeprom
+#define SaveEeprom
 struct AmountofWater
 {
     uint16_t stage_1;   //  Low flow
@@ -36,10 +43,10 @@ struct AmountofWater
 };
 typedef struct Mode_Parameter
 {
-    uint16_t Water;
+    uint16_t Water;     // Amount of water
     struct AmountofWater AmountOfWaterPumping;
-    uint16_t GrindingDuration;
-    bool DirGrinding;
+    uint16_t GrindingDuration;  // Grinding interval
+    bool DirGrinding; // CW or CCW Grinding
 
 } Mode_Parameter_t;
 void ParameterDefaultSetting();

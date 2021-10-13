@@ -20,7 +20,7 @@
 #include "driverlib/gpio.h"
 #include "driverlib/sysctl.h"
 extern void ADS1118_Coms(uint16_t config, int mode);
-extern int32_t dummyTemp;
+
 void ADS_Config(unsigned int mode)
 {
     //ADS_Read(mode, ADSCON_CH0);

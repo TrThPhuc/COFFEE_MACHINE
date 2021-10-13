@@ -206,13 +206,13 @@ void SSI1_IntHandler(void)
 
         datas = ui16RxBuf[0];
         fb_config = ui16RxBuf[1];
-        if (fb_config == (0xB9B))       //8b9a & 7FFF = B9A
+        if (fb_config == (0xB3B))       //8b9a & 7FFF = B9A
             Steam.hot_data = datas;     //Steam.Code = 0x8B8A
-        else if (fb_config == 0xB8B)    //8b8a & 7FFF
+        else if (fb_config == 0xB2B)    //8b8a & 7FFF = B8A
             Steam.cold_data = datas;
-        else if (fb_config == 0x3B9B)   // CH1 BB8A         // Hot_Water
+        else if (fb_config == 0x3B3B)   // CH1 BB8A         // Hot_Water
             Hot_Water.hot_data = datas; //bb9a & 7FFF = 3b9a
-        else if (fb_config == 0x3B8B)   //bb8a & 7fff = 3b8a
+        else if (fb_config == 0x3B2B)   //bb8a & 7fff = 3b8a
             Hot_Water.cold_data = datas;
 
     }

@@ -24,8 +24,10 @@
 #include "driverlib/sysctl.h"
 #include "driverlib/ssi.h"
 #include "driverlib/pin_map.h"
+#include "driverlib/eeprom.h"
 
 #include "TCA9539.h"
+#include "TCA9539_hw_memmap.h"
 extern TCA9539Regs TCA9539_IC1;
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 // System Defines
@@ -33,6 +35,8 @@ extern TCA9539Regs TCA9539_IC1;
 #define Kernel_LCD_pr
 #define NumOfPage       9
 #define InitPageDisplay 3
+#define AddDataEeprom   0x00
+#define SaveEeprom
 //#define uDma_SSI0
 // ---------------------Shared function prototypes of Interface LCD -------------------------------
 extern void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column,
@@ -50,6 +54,10 @@ extern uint8_t LCD_IMAGE_Sec[];
 volatile uint8_t currentcount = 0;
 
 // -------------------------------- KERNEL -------------------------------------
+#define ReadMenuB TCA9539_IC1.TCA9539_Input.all & (Menu_Bt)
+#define ReadUpB TCA9539_IC1.TCA9539_Input.all & (Up_Bt)
+#define ReadDownB TCA9539_IC1.TCA9539_Input.all & (Down_Bt)
+
 extern void SerialCommsInit(void);
 extern void SerialHostComms(void);
 
@@ -206,18 +214,19 @@ void SerialCommsInit(void)
 }
 void ButtonCmd_Init(void)
 {
-    GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0); // unlock pin PF0
-    GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_DIR_MODE_IN); // UP Button
-    GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_DIR_MODE_IN); // Down Button
-    GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_4, GPIO_DIR_MODE_IN); // Set Button
-// Weak pull-up
-    GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_STRENGTH_12MA,
-    GPIO_PIN_TYPE_STD_WPU);
-    GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_STRENGTH_12MA,
-    GPIO_PIN_TYPE_STD_WPU);
-    GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_4, GPIO_STRENGTH_12MA,
-    GPIO_PIN_TYPE_STD_WPU);
-    GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0);
+    /*    GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0); // unlock pin PF0
+     GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_DIR_MODE_IN); // UP Button
+     GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_DIR_MODE_IN); // Down Button
+     GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_4, GPIO_DIR_MODE_IN); // Set Button
+     // Weak pull-up
+     GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_STRENGTH_12MA,
+     GPIO_PIN_TYPE_STD_WPU);
+     GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_STRENGTH_12MA,
+     GPIO_PIN_TYPE_STD_WPU);
+     GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_4, GPIO_STRENGTH_12MA,
+     GPIO_PIN_TYPE_STD_WPU);
+     GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0);*/
+
 }
 void SerialHostComms(void)
 {
@@ -226,9 +235,15 @@ void SerialHostComms(void)
 void GetButtonCmd(void)
 {
 
-    BsetFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4);    // sw1
-    BupFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0);     // sw2
-    BdownFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_1);
+    /*
+     *  BsetFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4);    // sw1
+     BupFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0);     // sw2
+     BdownFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_1);   // sw3
+     */
+    // Read external gpio ic
+    BsetFlag = ReadMenuB;
+    BupFlag = ReadUpB;
+    BdownFlag = ReadDownB;
 
     if (BsetFlag == 0)
     {
@@ -294,6 +309,8 @@ void ButtonSet_cmd()
             else
             {
                 current_page = 0;
+                // Save parameter to eeprom
+                save_pr = 1;
                 NodeSelected = &Menu;
 
             }
@@ -308,8 +325,8 @@ void ButtonSet_cmd()
         EnterNode();
         ReturnNode();
     }
-
-    if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4) != 0) // Release Set button
+//GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4)
+    if (ReadMenuB) // Release Set button
     {
         Ack_BSet = 0;
         Ack_Return = 0;
@@ -345,7 +362,9 @@ void ButtonDown_cmd()
             }
         }
     }
-    if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_1) == 1)   // Release Down button
+    //GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_1) == 1
+    uint16_t phc = ReadDownB;
+    if (ReadDownB)   // Release Down button
     {
         CmdDispatcher = &defaultcmd;
         Ack_Bdown = 0;
@@ -379,7 +398,8 @@ void ButtonUp_cmd()
 
         }
     }
-    if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0) == 1)  // Release Up button
+    //GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0)
+    if (ReadUpB)  // Release Up button
     {
         CmdDispatcher = &defaultcmd;
         Ack_Bup = 0;
@@ -396,13 +416,19 @@ void PageDisplay()
         Down_window_index = 0;
         Up_window_index = 3;
         if (save_pr)
-        {                    // Write parameter
+        {
+            save_pr = 0;
+            // Rewrite parameter to system when return page 0
             for (i = 0; i < 16; i++)
-            {
                 *Pr_Packet[i] = Pr_PacketCopy[i];
-            }
+#ifdef SaveEeprom
+            uint32_t *ui32Ptr = (uint32_t*) Pr_PacketCopy;
+   //         EEPROMProgram(ui32Ptr, AddDataEeprom, 8);   // Polling method
+
+#endif
+
         }
-        if (cpy_pr && current_page == 1)
+        if (current_page == 1)
         {                     // Read & modify parameter
             for (i = 0; i < 16; i++)
             {
@@ -486,7 +512,7 @@ void PageDisplay()
         VrTimer1[0]++;
     }
 #endif
-   (*PagePointer)();
+    (*PagePointer)();
     LCD_TaskPointer = &CmdInterpreter;
 
 }

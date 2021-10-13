@@ -8,9 +8,10 @@
 #ifndef TCA9539_HW_MEMMAP_H_
 #define TCA9539_HW_MEMMAP_H_
 
-#define Bt1                     0x01
-#define Bt2                     0x02
-#define Bt3                     0x04
+// TCA9539 IC 1
+#define Menu_Bt                 0x01
+#define Up_Bt                   0x02
+#define Down_Bt                 0x04
 #define Expresso1_Bt            0x08
 #define Expresso2_Bt            0x10
 #define Decatt1_Bt              0x20
@@ -26,6 +27,7 @@
 #define LED_BT4                 0x4000
 #define Bt11                    0x8000
 
+// TCA9539 IC 2
 #define LCD_back_Light          0x10
 #define Bt10                    0x20
 #define Brake_BLDC3             0x40
@@ -40,6 +42,7 @@
 #define Brake_BLDC2             0x4000
 #define Alarm_BLDC_2            0x8000
 
+// TCA9539 IC 3
 #define HotWater                0x10
 #define Alarm_BLDC_1            0x20
 #define Brake_BLDC1             0x40
