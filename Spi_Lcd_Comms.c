@@ -41,10 +41,18 @@ extern TCA9539Regs TCA9539_IC1;
 // ---------------------Shared function prototypes of Interface LCD -------------------------------
 extern void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column,
                          uint8_t *text);
+extern void Disp_Str_5x8_Image(volatile uint8_t page, volatile uint8_t column,
+                               uint8_t *text, uint8_t *Image);
+extern void Disp_Str_8x16(uint8_t page, uint8_t column, uint8_t *text);
+extern void Disp_Str_8x16_Image(uint8_t page, uint8_t column, uint8_t *text);
+extern void Disp_20x20_Image(uint8_t page, uint8_t column, uint8_t *iPtr,
+                             uint8_t Image);
+extern void disp_bitmap(uint8_t page, uint8_t col, uint8_t *obj);
 extern void LCD_Disp_Clr(uint8_t dat);
 extern void LCD_Write_Cmd(uint8_t cmd);
 extern void LCD_Write_Data(uint8_t cmd);
-
+extern void disp_bitmap(uint8_t page, uint8_t col, uint8_t *obj);
+extern void Copy_bitExImage(void *ptr);
 extern uint8_t coeff_change;
 #ifdef uDma_SSI0
 extern uint8_t *LCD_IMAGE_Send, *LCD_IMAGE_Write;
@@ -81,6 +89,7 @@ void Page5_Display(void);   // Page 2 display
 void Page6_Display(void);   // Page 2 display
 void Page7_Display(void);   // Page 2 display
 void defaultcmd(void);
+void pageWelcom_Display(void);
 void Page_Cursor_Display(uint8_t page, uint8_t pos);   // Display cursor
 
 // Function prototype for EEPROM emulator
@@ -98,12 +107,16 @@ extern void WriteImageToDriverLCD(void *bufferPtr);
 extern void LCD_Write_Dat(uint8_t cmd);
 extern int16_t VrTimer1[4];
 extern void LCD_Address_Set(uint8_t page, uint8_t column);
+extern uint8_t LCD_IMAGE[1024];
+extern uint8_t bitmapCoffeeE1[];
+
 uint8_t Pr_Index = 0, NumOfPr, Offset = 0;    // Indicator  parameter
 uint8_t countList = 0;    // Count variable used to change page fuction
 uint16_t *ObjSelect, *ObjSelectStep;  // Object selected and step Object pointer
 uint8_t ObjSelectFlag = 0;
 uint8_t current_page = 0, page_change = 1, layer = 0;
-uint8_t CursorPosCol[NumOfPage] = { 100, 100, 100, 60, 60, 60, 100, 60, 60 };
+uint8_t CursorPosCol[NumOfPage] =
+        { 120, 120, 120, 120, 120, 120, 120, 120, 120 };
 
 // Acknowledge Button event
 int8_t Ack_BSet = 0, Ack_Bdown = 0, Ack_Bup = 0, Ack_Enter = 0, Ack_Return = 0,
@@ -120,6 +133,7 @@ float Pr_Gui_Packet[10];            // Array for Gui display parameter
 uint8_t save_pr, cpy_pr;
 
 // --------------------------User variable used for display -----------------------------------------
+_Bool boostFlag = 1;
 char *Str_Display;
 char Str_Temp[10];
 
@@ -128,9 +142,16 @@ char *LCD_String_Page6[5] =
 
 char *LCD_String_Page2[] = { "Epresso 1", "Epresso 2", "Decatt 1 ", "Decatt 2 ",
                              "Times    " };
+char *LCD_String_Page0[] = { "Da xan sang", "Dang ve sinh", "Tha thuoc ve sinh",
+                             "Dang ve sinh", "thuoc", "Epresso", "Epresso", "Especial" };
+uint8_t id_Page0 = 0;
 
+char LCD_PosStr_page0[] = { 24, 18, 3, 22, 45, 20, 8 };
 char *LCD_Format_Parameter[4] = { "%d", "%d", "%d", "%d" };
 uint16_t LCD_Step_Parameter[4] = { 1, 1, 1, 1 };
+char str[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x7C, 0x38,
+               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+extern uint8_t bitmap[];
 typedef struct Node Node_t;
 typedef struct
 {
@@ -180,6 +201,7 @@ void EnterNode()
 
     if (BupFlag == 0 && Ack_Enter == 0)
     {
+        Ack_reset = 1;
         Ack_Enter = 1;
         Node *ptr = (Node*) NodeSelected->item[Pr_Index];
         if (ptr == NULL)
@@ -196,6 +218,7 @@ void ReturnNode()
     if (BdownFlag == 0 && Ack_Return == 0)
     {
         Ack_Return = 1;
+        Ack_reset = 1;
         Node *ptr = (Node*) NodeSelected->returnN;
         if (ptr == NULL)
             return;
@@ -206,26 +229,26 @@ void ReturnNode()
 }
 void SerialCommsInit(void)
 {
-    //ButtonCmd_Init();
-    LCD_TaskPointer = &CmdInterpreter;
-    PagePointer = &Page0_Display;
+    ButtonCmd_Init();
+    LCD_TaskPointer = &GetButtonCmd;
+    PagePointer = &pageWelcom_Display;
     MenuInitialize();
     NodeSelected = &Menu;
 }
 void ButtonCmd_Init(void)
 {
-    /*    GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0); // unlock pin PF0
-     GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_DIR_MODE_IN); // UP Button
-     GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_DIR_MODE_IN); // Down Button
-     GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_4, GPIO_DIR_MODE_IN); // Set Button
-     // Weak pull-up
-     GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_STRENGTH_12MA,
-     GPIO_PIN_TYPE_STD_WPU);
-     GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_STRENGTH_12MA,
-     GPIO_PIN_TYPE_STD_WPU);
-     GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_4, GPIO_STRENGTH_12MA,
-     GPIO_PIN_TYPE_STD_WPU);
-     GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0);*/
+    // GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0); // unlock pin PF0
+    GPIODirModeSet(GPIO_PORTC_BASE, GPIO_PIN_4, GPIO_DIR_MODE_IN); // PF0 UP Button
+    GPIODirModeSet(GPIO_PORTC_BASE, GPIO_PIN_5, GPIO_DIR_MODE_IN); // PF1 Down Button
+    GPIODirModeSet(GPIO_PORTC_BASE, GPIO_PIN_6, GPIO_DIR_MODE_IN); // PF4 Set Button
+    // Weak pull-up
+    GPIOPadConfigSet(GPIO_PORTC_BASE, GPIO_PIN_4, GPIO_STRENGTH_12MA,
+    GPIO_PIN_TYPE_STD_WPU);
+    GPIOPadConfigSet(GPIO_PORTC_BASE, GPIO_PIN_5, GPIO_STRENGTH_12MA,
+    GPIO_PIN_TYPE_STD_WPU);
+    GPIOPadConfigSet(GPIO_PORTC_BASE, GPIO_PIN_6, GPIO_STRENGTH_12MA,
+    GPIO_PIN_TYPE_STD_WPU);
+    //GPIOUnlockPin(GPIO_PORTF_BASE, GPIO_PIN_0);
 
 }
 void SerialHostComms(void)
@@ -235,15 +258,14 @@ void SerialHostComms(void)
 void GetButtonCmd(void)
 {
 
-    /*
-     *  BsetFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4);    // sw1
-     BupFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0);     // sw2
-     BdownFlag = GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_1);   // sw3
-     */
+    BsetFlag = GPIOPinRead(GPIO_PORTC_BASE, GPIO_PIN_6);    // sw1
+    BupFlag = GPIOPinRead(GPIO_PORTC_BASE, GPIO_PIN_4);     // sw2
+    BdownFlag = GPIOPinRead(GPIO_PORTC_BASE, GPIO_PIN_5);   // sw3
+
     // Read external gpio ic
-    BsetFlag = ReadMenuB;
-    BupFlag = ReadUpB;
-    BdownFlag = ReadDownB;
+    /*    BsetFlag = ReadMenuB;
+     BupFlag = ReadUpB;
+     BdownFlag = ReadDownB;*/
 
     if (BsetFlag == 0)
     {
@@ -300,7 +322,7 @@ void ButtonSet_cmd()
 
     else
     {
-        if (VrTimer1[1] > 100 && Ack_reset == 0) // hold button set for change to page 0
+        if (VrTimer1[1] > 150 && Ack_reset == 0) // hold button set for change to page 0
         {
             Ack_reset = 1;
             VrTimer1[1] = ObjSelectFlag = 0;
@@ -325,8 +347,8 @@ void ButtonSet_cmd()
         EnterNode();
         ReturnNode();
     }
-//GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4)
-    if (ReadMenuB) // Release Set button
+
+    if (GPIOPinRead(GPIO_PORTC_BASE, GPIO_PIN_6)) // Release Set button //ReadMenuB
     {
         Ack_BSet = 0;
         Ack_Return = 0;
@@ -341,7 +363,7 @@ void ButtonDown_cmd()
     if ((Ack_Bdown == 0) && (current_page != 0))
     {
         Ack_Bdown = 1;
-        if (ObjSelectFlag == 1)
+        if (ObjSelectFlag == 1 && (*ObjSelect != 0))
         {
             *ObjSelect = *ObjSelect - *ObjSelectStep;
 
@@ -362,9 +384,8 @@ void ButtonDown_cmd()
             }
         }
     }
-    //GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_1) == 1
-    uint16_t phc = ReadDownB;
-    if (ReadDownB)   // Release Down button
+    // GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_1) == 1
+    if (GPIOPinRead(GPIO_PORTC_BASE, GPIO_PIN_5)) // Release Down button //ReadDownB
     {
         CmdDispatcher = &defaultcmd;
         Ack_Bdown = 0;
@@ -399,7 +420,7 @@ void ButtonUp_cmd()
         }
     }
     //GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0)
-    if (ReadUpB)  // Release Up button
+    if (GPIOPinRead(GPIO_PORTC_BASE, GPIO_PIN_4)) // Release Up button //ReadUpB
     {
         CmdDispatcher = &defaultcmd;
         Ack_Bup = 0;
@@ -412,7 +433,7 @@ void PageDisplay()
     if (page_change == 1)
     {
         Pr_Index = 0;
-        LCD_Disp_Clr(0x00);
+        //   LCD_Disp_Clr(0x00);
         Down_window_index = 0;
         Up_window_index = 3;
         if (save_pr)
@@ -423,7 +444,7 @@ void PageDisplay()
                 *Pr_Packet[i] = Pr_PacketCopy[i];
 #ifdef SaveEeprom
             uint32_t *ui32Ptr = (uint32_t*) Pr_PacketCopy;
-   //         EEPROMProgram(ui32Ptr, AddDataEeprom, 8);   // Polling method
+            //         EEPROMProgram(ui32Ptr, AddDataEeprom, 8);   // Polling method
 
 #endif
 
@@ -438,7 +459,8 @@ void PageDisplay()
         switch (current_page)
         {
         case 0:
-            PagePointer = &Page0_Display;
+            PagePointer =
+                    (boostFlag) ? (&pageWelcom_Display) : (&Page0_Display);
             Ack_PrAdj = 0;
             break;
         case 1:
@@ -448,6 +470,7 @@ void PageDisplay()
             break;
         case 2:
             PagePointer = &Page2_Display;
+            // NumOfPr = 5;
             Ack_PrAdj = 0;
             break;
         case 3:
@@ -483,10 +506,14 @@ void PageDisplay()
         page_change = 0;
 
     }
-#ifdef uDma_SSI0
-    if (VrTimer1[0] > 5) // refesh page
+    (VrTimer1[2] > 400) ? (boostFlag = 0, page_change = 1) : VrTimer1[2]++;
+
+    if (VrTimer1[0] > 10) // refesh page
     {
         VrTimer1[0] = 0;
+#ifdef uDma_SSI0
+
+
         if (currentcount == 0)
         {
             LCD_IMAGE_Send = LCD_IMAGE_Pri;
@@ -502,42 +529,93 @@ void PageDisplay()
             LCD_IMAGE_Write = LCD_IMAGE_Pri;
 
         }
-      clearBuffer((void*) LCD_IMAGE_Write);
-        LCD_Write_Dat(0);
+       clearBuffer((void*) LCD_IMAGE_Write);
+
+       LCD_Write_Dat(0);
         (*PagePointer)();
 
+
+#endif
+#ifndef uDma_SSI0
+        (*PagePointer)();
+        disp_bitmap(0, 0, (uint8_t*) LCD_IMAGE);
+        clearBuffer((void*) LCD_IMAGE);
+
+#endif
     }
     else
     {
         VrTimer1[0]++;
     }
-#endif
-    (*PagePointer)();
-    LCD_TaskPointer = &CmdInterpreter;
-
+    LCD_TaskPointer = &GetButtonCmd;
 }
-
+void Vertical_Display(void)
+{
+    //  LCD_Address_Set(8, 34);
+    uint8_t temp_page = 7;
+    uint8_t temp_col = 33;
+    LCD_IMAGE[128 * temp_page + temp_col] = 0xFF;
+    temp_col = 64;
+    LCD_IMAGE[128 * temp_page + temp_col] = 0xFF;
+    temp_col = 94;
+    LCD_IMAGE[128 * temp_page + temp_col] = 0xFF;
+}
 void Page0_Display(void)
 {
-    Str_Display = "Time";
-    Disp_Str_5x8(1, 50, (uint8_t*) Str_Display);
+    /*    Str_Display = "Time";
+     Disp_Str_5x8(1, 50, (uint8_t*) Str_Display);
 
-    Str_Display = "Ten nha san xuat: ";
-    Disp_Str_5x8(2, 1, (uint8_t*) Str_Display);
-    Str_Display = "Trang thai";
-    Disp_Str_5x8(5, 10, (uint8_t*) Str_Display);
+     Str_Display = "Ten nha san xuat: ";
+     Disp_Str_5x8(2, 1, (uint8_t*) Str_Display);
+     Str_Display = "Trang thai";
+     Disp_Str_5x8(5, 10, (uint8_t*) Str_Display);
 
-    Str_Display = "Tong ly(ngay):";
-    Disp_Str_5x8(7, 2, (uint8_t*) Str_Display);
-    fflush(stdout);
+     Str_Display = "Tong ly(ngay):";
+     Disp_Str_5x8(7, 2, (uint8_t*) Str_Display);
+     fflush(stdout);
+     sprintf(Str_Temp, "%d", *dataSentList[0]);
+     Disp_Str_5x8(8, 30, (uint8_t*) Str_Temp);
+
+     Str_Display = "Tong ly:";
+     Disp_Str_5x8(7, 90, (uint8_t*) Str_Display);
+     fflush(stdout);
+     sprintf(Str_Temp, "%d   ", *dataSentList[1]);
+     Disp_Str_5x8(8, 90, (uint8_t*) Str_Temp);*/
+    switch (id_Page0)
+    {
+    case 3:
+        Str_Display = LCD_String_Page0[id_Page0];
+        Disp_Str_8x16_Image(3, LCD_PosStr_page0[id_Page0],
+                            (uint8_t*) Str_Display);
+        Str_Display = LCD_String_Page0[id_Page0 + 1];
+        Disp_Str_8x16_Image(5, LCD_PosStr_page0[id_Page0 + 1],
+                            (uint8_t*) Str_Display);
+        break;
+    case 5:
+        Disp_20x20_Image(4, 82, (uint8_t*) bitmapCoffeeE1,
+                         (uint8_t*) LCD_IMAGE);
+        goto skip;
+    case 6:
+        Disp_20x20_Image(4, 70, (uint8_t*) bitmapCoffeeE1,
+                         (uint8_t*) LCD_IMAGE);
+        Disp_20x20_Image(4, 95, (uint8_t*) bitmapCoffeeE1,
+                         (uint8_t*) LCD_IMAGE);
+
+        skip: default:
+        Str_Display = LCD_String_Page0[id_Page0];
+        Disp_Str_8x16_Image(4, LCD_PosStr_page0[id_Page0],
+                            (uint8_t*) Str_Display);
+    }
+
     sprintf(Str_Temp, "%d", *dataSentList[0]);
-    Disp_Str_5x8(8, 30, (uint8_t*) Str_Temp);
-
-    Str_Display = "Tong ly:";
-    Disp_Str_5x8(7, 90, (uint8_t*) Str_Display);
-    fflush(stdout);
-    sprintf(Str_Temp, "%d   ", *dataSentList[1]);
-    Disp_Str_5x8(8, 90, (uint8_t*) Str_Temp);
+    Disp_Str_5x8_Image(8, 9, (uint8_t*) Str_Temp, LCD_IMAGE);
+    sprintf(Str_Temp, "%d", *dataSentList[0]);
+    Disp_Str_5x8_Image(8, 39, (uint8_t*) Str_Temp, LCD_IMAGE);
+    sprintf(Str_Temp, "%d", *dataSentList[0]);
+    Disp_Str_5x8_Image(8, 69, (uint8_t*) Str_Temp, LCD_IMAGE);
+    sprintf(Str_Temp, "%d", *dataSentList[0]);
+    Disp_Str_5x8_Image(8, 99, Str_Temp, LCD_IMAGE);
+    Vertical_Display();
 
 }
 void Page1_Display(void)
@@ -545,13 +623,14 @@ void Page1_Display(void)
     uint8_t id, pointer_pos;
     id = Down_window_index;
     Str_Display = "Thong so: ";
-    Disp_Str_5x8(2, 2, (uint8_t*) Str_Display);
+    Disp_Str_5x8_Image(2, 2, (uint8_t*) Str_Display, LCD_IMAGE);
+    // disp_bitmap(2,50,(uint8_t*)str);
     Str_Display = "Thong so canh bao: ";
-    Disp_Str_5x8(4, 2, (uint8_t*) Str_Display);
+    Disp_Str_5x8_Image(4, 2, (uint8_t*) Str_Display, LCD_IMAGE);
     Str_Display = "Thong tin may: ";
-    Disp_Str_5x8(6, 2, (uint8_t*) Str_Display);
+    Disp_Str_5x8_Image(6, 2, (uint8_t*) Str_Display, LCD_IMAGE);
     Str_Display = "Factory reset: ";
-    Disp_Str_5x8(8, 2, (uint8_t*) Str_Display);
+    Disp_Str_5x8_Image(8, 2, (uint8_t*) Str_Display, LCD_IMAGE);
 //-----------------------------------------------------------
 // Display cursor
     pointer_pos = (Pr_Index - id + 1) * 2;
@@ -592,8 +671,8 @@ void Page3_Display(void)
     Disp_Str_5x8(4, 50, (uint8_t*) Str_Temp);
 //-----------------------------------------------------------
 // Display cursor
-    pointer_pos = (Pr_Index - id + 1) * 2;
-    Page_Cursor_Display(3, pointer_pos);
+    // pointer_pos = (Pr_Index - id + 1) * 2;
+    //  Page_Cursor_Display(3, pointer_pos);
 
 }
 void Page4_Display(void)
@@ -616,7 +695,7 @@ void Page4_Display(void)
     Str_Display = "Ngay san xuat: ";
     Disp_Str_5x8(8, 2, (uint8_t*) Str_Display);
     sprintf(Str_Temp, "%d", *dataSentList[7]);
-    Disp_Str_5x8(8, 60, (uint8_t*) Str_Temp);
+    Disp_Str_5x8(8, 90, (uint8_t*) Str_Temp);
 
 }
 void Page5_Display(void)
@@ -633,26 +712,38 @@ void Page6_Display(void)
     Str_Display = LCD_String_Page6[id];
     Disp_Str_5x8(2, 2, (uint8_t*) Str_Display);
     sprintf(Str_Temp, "%d", Pr_PacketCopy[id + Offset]);
+    Disp_Str_5x8(2, 80, "      ");
     Disp_Str_5x8(2, 80, (uint8_t*) Str_Temp);
 
     Str_Display = LCD_String_Page6[id + 1];
     Disp_Str_5x8(4, 2, (uint8_t*) Str_Display);
     sprintf(Str_Temp, "%d", Pr_PacketCopy[id + 1 + Offset]);
+    Disp_Str_5x8(4, 80, "      ");
     Disp_Str_5x8(4, 80, (uint8_t*) Str_Temp);
 
     Str_Display = LCD_String_Page6[id + 2];
     Disp_Str_5x8(6, 2, (uint8_t*) Str_Display);
     sprintf(Str_Temp, "%d", Pr_PacketCopy[id + 2 + Offset]);
+    Disp_Str_5x8(6, 80, "      ");
     Disp_Str_5x8(6, 80, (uint8_t*) Str_Temp);
 
     Str_Display = LCD_String_Page6[id + 3];
     Disp_Str_5x8(8, 2, (uint8_t*) Str_Display);
     sprintf(Str_Temp, "%d", Pr_PacketCopy[id + 3 + Offset]);
+    Disp_Str_5x8(8, 80, "      ");
     Disp_Str_5x8(8, 80, (uint8_t*) Str_Temp);
 //-----------------------------------------------------------
 // Display cursor
     pointer_pos = (Pr_Index - id + 1) * 2;
     Page_Cursor_Display(2, pointer_pos);
+
+}
+void pageWelcom_Display()
+{
+    uint8_t i = 50;
+    Str_Display = "XIN CHAO";
+    Disp_Str_5x8_Image(6, 45, (uint8_t*) Str_Display, bitmap);
+    Copy_bitExImage((void*) bitmap);
 
 }
 
@@ -666,13 +757,13 @@ void Page_Cursor_Display(uint8_t page, uint8_t pos)
         if (n == i)
         {
             Str_Display = "<";
-            Disp_Str_5x8(2 * i, col, (uint8_t*) Str_Display);
+            Disp_Str_5x8_Image(2 * i, col, (uint8_t*) Str_Display, LCD_IMAGE);
         }
         else
         {
             Str_Display = " ";
         }
-        Disp_Str_5x8(2 * i, col, (uint8_t*) Str_Display);
+        Disp_Str_5x8_Image(2 * i, col, (uint8_t*) Str_Display, LCD_IMAGE);
     }
 
 }

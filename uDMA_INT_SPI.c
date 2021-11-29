@@ -49,6 +49,8 @@ uint16_t SteamBuf[MEM_BUFFER_SIZE];
 uint16_t HotWaterBuf[MEM_BUFFER_SIZE];
 volatile uint8_t pagelcd = 0;
 #define col 128
+extern uint8_t LCD_IMAGE[1024];
+
 #ifdef uDma_SSI0
 uint8_t LCD_IMAGE_Pri[1024];
 uint8_t LCD_IMAGE_Sec[1024];
@@ -94,11 +96,23 @@ void clearBuffer(void *ptr)
     Write_ready = 0;
     uDMAChannelControlSet(UDMA_CHANNEL_SW | UDMA_PRI_SELECT,
     UDMA_SIZE_32 | UDMA_SRC_INC_NONE | UDMA_DST_INC_32 |
-    UDMA_ARB_256);
+    UDMA_ARB_32);
     uDMAChannelTransferSet(UDMA_CHANNEL_SW | UDMA_PRI_SELECT, UDMA_MODE_AUTO,
                            (void*) ui32SrcBuf, ptr, 256);
     uDMAChannelEnable(UDMA_CHANNEL_SW);
     uDMAChannelRequest(UDMA_CHANNEL_SW);
+}
+void Copy_bitExImage(void *ptr)
+{
+
+    uDMAChannelControlSet(UDMA_CHANNEL_SW | UDMA_PRI_SELECT,
+    UDMA_SIZE_32 | UDMA_SRC_INC_32 | UDMA_DST_INC_32 |
+    UDMA_ARB_32);
+    uDMAChannelTransferSet(UDMA_CHANNEL_SW | UDMA_PRI_SELECT, UDMA_MODE_AUTO,
+                           (void*) ptr, LCD_IMAGE, 256);
+    uDMAChannelEnable(UDMA_CHANNEL_SW);
+    uDMAChannelRequest(UDMA_CHANNEL_SW);
+
 }
 void Init_LCDSPI_DMA(void)
 {
@@ -237,8 +251,6 @@ void WriteImageToDriverLCD(void *bufferPtr)
         UDMA_MODE_BASIC,
                                currentBuffer, (void*) (SSI0_BASE + SSI_O_DR),
                                128);
-        while (GPIOPinRead(GPIO_PORTA_BASE, GPIO_PIN_7) == 0)
-            ;
 
         uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
     }
@@ -291,8 +303,13 @@ void ReadTxFiFO(void)
         if (pagelcd < 7)
         {
             pagelcd++;
+            GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_7, 0);
+            while (GPIOPinRead(GPIO_PORTA_BASE, GPIO_PIN_7) != 0)
+                ;
+            LCD_Write_Cmd(0xb0 | pagelcd);
+            LCD_Write_Cmd(0x10);
+            LCD_Write_Cmd(0X00);
 
-            LCD_Address_Set((pagelcd + 1), 1);
             GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_PIN_7);
             while (GPIOPinRead(GPIO_PORTA_BASE, GPIO_PIN_7) == 0)
                 ;

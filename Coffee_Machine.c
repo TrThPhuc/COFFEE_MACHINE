@@ -130,14 +130,16 @@ void LCD_Write_Dat(uint8_t dat);    // Write data to LCD
 void LCD_Address_Set(uint8_t page, uint8_t column); // Set cursor
 // Display ASCII string
 void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text);
+void Disp_Str_8x16(uint8_t page, uint8_t column, uint8_t *text);
 void LCD_Disp_Clr(uint8_t dat);     // Clear LCD
 //Variable
+extern uint8_t LCD_IMAGE[1024];
 uint16_t *dataSentList[10]; // Terminal connect to monitor variable
 uint16_t *Pr_Packet[16];    // Terminal connect to Parameter
 uint8_t coeff_change;   // Flag for change parameter in mode /////////
 int16_t VrTimer1[4];    // Virtual timer
 extern const unsigned char ascii_table_5x8[95][5]; // Bit Map for ASCII table (ASCII_Font.c)
-
+extern const unsigned char ascii_table_8x16[95][16];
 ////////////Used for DMA mode///////////////////////
 extern void WriteImageToDriverLCD(void *bufferPtr);
 uint8_t *LCD_IMAGE_Send, *LCD_IMAGE_Write;
@@ -146,7 +148,7 @@ volatile bool Write_ready = 1;
 extern void ReadTxFiFO(void);
 extern void WriteTxFiFO(uint8_t c);
 extern volatile uint8_t pagelcd;
-uint16_t counttest; // just used for test
+uint16_t counttest, countcup = 1102; // just used for test
 // ---------------------------- ADS1118 Temperature Sensor ------------------------------------
 ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
@@ -304,7 +306,7 @@ void main()
     // Initialize GUI interface
     SerialCommsInit();
     // Assign data stream to Gui variable display LCD - Display on Page 0 LCD
-    dataSentList[0] = &counttest;   //&SumOfCupInUsed;
+    dataSentList[0] = &countcup;   //&SumOfCupInUsed;
     dataSentList[1] = &SumOfCupInUsed_day;
     dataSentList[2] = &Blade;
     dataSentList[3] = &Ron;
@@ -364,9 +366,9 @@ void main()
     TCA9539_IC1.TCA9539_Input.all = 0xFF;
     // TCA9539Init(&TCA9539_IC1);
     uint32_t speed = PWMGenPeriodGet(PWM0_BASE, PWM_GEN_0);
-     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0,
-     PWMGenPeriodGet(PWM0_BASE, PWM_GEN_0) / 2);
-     PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0,
+                     PWMGenPeriodGet(PWM0_BASE, PWM_GEN_0) / 2);
+    PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
     while (1)
     {
         Ptr_Task(); // Swept periodic tasks
@@ -606,7 +608,7 @@ void LCD_Write_Dat(uint8_t cmd)
 #endif
 #ifdef uDma_SSI0
     if ((!uDMAChannelIsEnabled(UDMA_CHANNEL_SSI0TX)) && (pagelcd == 0)){
-    LCD_Address_Set(1, 1);
+   // LCD_Address_Set(1, 1);
     SET_RS;
     WriteImageToDriverLCD(LCD_IMAGE_Send);
     }
@@ -629,8 +631,8 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
 {
 
     uint8_t i = 0, j, k;
-    // static uint16_t index = 0;
-    //index = (page - 1) * 128 + (column - 1);
+    static uint16_t index = 0;
+    index = (page - 1) * 128 + (column - 1);
 
     while (text[i] > 0x00)
     {
@@ -644,9 +646,10 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
             for (k = 0; k < 5; k++)
             {
                 LCD_Write_Dat(ascii_table_5x8[j][k]);
+
             }
             i++;
-            column += 5;
+            (j == 0) ? (column += 5) : (column += 6);
 #endif
 #ifdef uDma_SSI0
 
@@ -664,6 +667,121 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
         }
         else
             i++;
+
+    }
+
+}
+void Disp_Str_5x8_Image(volatile uint8_t page, volatile uint8_t column,
+                        uint8_t *text, uint8_t *Image)
+{
+    uint8_t i = 0, j, k;
+    page = page - 1;
+    column = column - 1;
+    while (text[i] > 0x00)
+    {
+
+        if ((text[i] >= 0x20) && (text[i] <= 0x7e))
+        {
+            j = text[i] - 0x20;
+
+            //  LCD_Address_Set(page, column);
+            for (k = 0; k < 5; k++)
+            {
+                Image[128 * page + (column + k)] = ascii_table_5x8[j][k];
+
+            }
+            i++;
+            (j == 0) ? (column += 5) : (column += 6);
+
+        }
+        else
+            i++;
+
+    }
+
+}
+void Disp_Str_8x16(uint8_t page, uint8_t column, uint8_t *text)
+{
+    uint8_t i = 0, j, k, n;
+
+    while (text[i] > 0x00)
+    {
+        if ((text[i] >= 0x20) && (text[i] <= 0x7E))  //ASii��Χ
+        {
+            j = text[i] - 0x20;
+            for (n = 0; n < 2; n++)
+            {
+                LCD_Address_Set(page + n, column);
+                for (k = 0; k < 8; k++)
+                {
+                    LCD_Write_Dat(ascii_table_8x16[j][k + 8 * n]);
+                }
+            }
+            i++;
+            column += 8;
+        }
+        else
+        {
+            i++;
+        }
+    }
+}
+void Disp_Str_8x16_Image(uint8_t page, uint8_t column, uint8_t *text)
+{
+    uint8_t i = 0, j, k, n;
+    page = page - 1;
+    column = column - 1;
+    while (text[i] > 0x00)
+    {
+        if ((text[i] >= 0x20) && (text[i] <= 0x7E))  //ASii��Χ
+        {
+            j = text[i] - 0x20;
+            for (n = 0; n < 2; n++)
+            {
+                // LCD_Address_Set(page + n, column);
+                for (k = 0; k < 8; k++)
+                {
+                    LCD_IMAGE[128 * (page + n) + (column + k)] =
+                            ascii_table_8x16[j][k + 8 * n];
+                }
+            }
+            i++;
+            (j == 0) ? (column += 4) : (column += 8);
+        }
+        else
+        {
+            i++;
+        }
+    }
+}
+void Disp_20x20_Image(uint8_t page, uint8_t column, uint8_t *iPtr,
+                      uint8_t Image)
+{
+    page = page - 1;
+    column = column - 1;
+    uint8_t i = 0, j, k, n;
+    for (n = 0; n < 2; n++)
+    {
+        for (k = 0; k < 20; k++)
+        {
+            LCD_IMAGE[128 * (page + n) + (column + k)] = iPtr[20 * n + k];
+        }
+
+    }
+}
+void disp_bitmap(uint8_t page, uint8_t col, uint8_t *obj)
+{
+    // LCD_Address_Set(page, col);
+    uint8_t i, j;
+    for (i = 0; i < 8; i++)
+    {
+        LCD_Write_Cmd(0xb0 | i);
+        LCD_Write_Cmd(0x10);
+        LCD_Write_Cmd(0X00);
+        for (j = 0; j < 128; j++)
+        {
+            LCD_Write_Dat(obj[128 * i + j]);
+        }
     }
 
 }
