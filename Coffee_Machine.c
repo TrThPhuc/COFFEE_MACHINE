@@ -755,7 +755,7 @@ void Disp_Str_8x16_Image(uint8_t page, uint8_t column, uint8_t *text)
     }
 }
 void Disp_20x20_Image(uint8_t page, uint8_t column, uint8_t *iPtr,
-                      uint8_t Image)
+                      uint8_t *Image)
 {
     page = page - 1;
     column = column - 1;

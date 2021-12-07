@@ -19,7 +19,7 @@
     <stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_PROJECT.Tiva TM4C123GH6PM.ccxml.Texas Instruments XDS110 USB Debug Probe_0/CORTEX_M4_0" value="COFFEE_MACHINE"/>
     <stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_TARGET_CONFIG" value="${target_config_active_default:COFFEE_MACHINE}"/>
     <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.Tiva TM4C123GH6PM.ccxml.Stellaris In-Circuit Debug Interface_0/CORTEX_M4_0" value="${build_artifact:COFFEE_MACHINE}"/>
-    <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.Tiva TM4C123GH6PM.ccxml.Texas Instruments XDS110 USB Debug Probe_0/CORTEX_M4_0" value="D:\ARM_M4_workspace\COFFEE_MACHINE\Debug\COFFEE_MACHINE.out"/>
+    <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.Tiva TM4C123GH6PM.ccxml.Texas Instruments XDS110 USB Debug Probe_0/CORTEX_M4_0" value="${build_artifact:COFFEE_MACHINE}"/>
     <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
         <listEntry value="/COFFEE_MACHINE"/>
     </listAttribute>
