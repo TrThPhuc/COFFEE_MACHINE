@@ -10,9 +10,12 @@
 #include "driverlib/timer.h"
 #include "driverlib/interrupt.h"
 #include "inc/hw_memmap.h"
+#include "driverlib/rom_map.h"
+#include "driverlib/rom.h"
 #define mSec2   160000
 #define mSec5   400000
 #define mSec10  800000
+#define mSec20  1600000
 #define mSec50  4000000
 #define mSec125 10000000
 
@@ -28,28 +31,30 @@ void InitSysClt(void)
     SysCtlClockSet(SYSCTL_SYSDIV_2_5 | SYSCTL_OSC_INT | SYSCTL_USE_PLL);
 // Pheripheral enable clock
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_SSI0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_SSI1);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_SSI0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_SSI1);
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_QEI0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_QEI0);
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER2);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER3);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER4);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER5);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER2);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER3);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER4);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER5);
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
+
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
 
 }
 void TimerSysClt(void)
@@ -64,9 +69,9 @@ void TimerSysClt(void)
     TimerLoadSet(TIMER0_BASE, TIMER_A, mSec2);
     TimerLoadSet(TIMER1_BASE, TIMER_A, mSec5);
     TimerLoadSet(TIMER2_BASE, TIMER_A, mSec50);
-    TimerLoadSet(TIMER3_BASE, TIMER_A, mSec125);
-    TimerLoadSet(TIMER4_BASE, TIMER_A, mSec125);
-    TimerLoadSet(TIMER5_BASE, TIMER_A, mSec5);
+    TimerLoadSet(TIMER3_BASE, TIMER_A, mSec125);    // Temperature control
+    TimerLoadSet(TIMER4_BASE, TIMER_A, mSec20);    //20ms
+    TimerLoadSet(TIMER5_BASE, TIMER_A, mSec5);     // PWM low freqency generate
 
 // Interrrupt timer configure
     TimerIntRegister(TIMER3_BASE, TIMER_A, &Temperature_Control); // Temperature control
@@ -75,6 +80,8 @@ void TimerSysClt(void)
 
     TimerIntEnable(TIMER3_BASE, TIMER_TIMA_TIMEOUT);
     TimerIntEnable(TIMER5_BASE, TIMER_TIMA_TIMEOUT);
+
+    TimerControlTrigger(TIMER0_BASE, TIMER_A, true);
 
     // TimerInt of Timmingprocess will enable when initalizing task which need to timming
 

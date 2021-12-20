@@ -8,7 +8,6 @@
 #ifndef COFFEE_MACHINE_H_
 #define COFFEE_MACHINE_H_
 
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -35,7 +34,7 @@
 
 // System define
 #define SysCltEeprom
-#define SaveEeprom
+//#define SaveEeprom
 struct AmountofWater
 {
     uint16_t stage_1;   //  Low flow
@@ -43,7 +42,9 @@ struct AmountofWater
 };
 typedef struct Mode_Parameter
 {
-    uint16_t Water;     // Amount of water
+    uint16_t PreInfusion;    // Pre-Infusion Time - second
+    uint16_t Time;           // Time for extraction - second
+
     struct AmountofWater AmountOfWaterPumping;
     uint16_t GrindingDuration;  // Grinding interval
     bool DirGrinding; // CW or CCW Grinding

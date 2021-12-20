@@ -34,7 +34,7 @@ _Bool PWMSSR1Enable, PWMSSR2Enable, PWMSSR3Enable;
 ADS1118_t *Temp_ptr;
 // True task 125ms
 extern uint16_t counttest;
-uint32_t dutyCount_SSR1 = 0, dutyCount_SSR2 = 0, dutyCount_SSR3 = 0;
+uint16_t dutyCount_SSR1 = 0, dutyCount_SSR2 = 0, dutyCount_SSR3 = 0;
 uint16_t activeDuty_SRR1 = 0, activeDuty_SRR2 = 0, activeDuty_SRR3 = 0;
 void LowFreqPWM(void);
 
@@ -61,11 +61,11 @@ void Temperature_Control(void)
         {
             switch (scale)
             {
-            case 0:                 // request hot data of steam, read cold data of preveous
+            case 0:     // request hot data of steam, read cold data of preveous
             case 1:
-                Temp_ptr = &Steam;  // request cold data of steam, read hot data of steam
+                Temp_ptr = &Steam; // request cold data of steam, read hot data of steam
                 break;
-            case 2:                 // request hot data of steam, read cold data of preveous
+            case 2:     // request hot data of steam, read cold data of preveous
             case 3:
                 Temp_ptr = &Hot_Water;
                 break;
@@ -94,8 +94,11 @@ void Temperature_Control(void)
         TCA9539_IC2.updateOutputFlag = 1;
         TCA9539_IC3.updateOutputFlag = 1;
 
-    }
+        TCA9539_IC1.ReadCmdFlag = 1;
+        TCA9539_IC2.ReadCmdFlag = 2;
+        TCA9539_IC3.ReadCmdFlag = 1;
 
+    }
 
 }
 void LowFreqPWM(void)
@@ -105,7 +108,7 @@ void LowFreqPWM(void)
     if (PWMSSR1Enable)
     {
 
-        if (dutyCount_SSR1 == (uint32_t) activeDuty_SRR1)
+        if (dutyCount_SSR1 == activeDuty_SRR1)
             GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_5, 0);
         if (dutyCount_SSR1 < 100)
             dutyCount_SSR1++;
@@ -123,7 +126,7 @@ void LowFreqPWM(void)
     //--------------------SSR2---------------------------------------
     if (PWMSSR2Enable)
     {
-        if (dutyCount_SSR2 == (uint32_t) activeDuty_SRR2)
+        if (dutyCount_SSR2 == activeDuty_SRR2)
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0); // turn on ssr out
         if (dutyCount_SSR2 < 100)
         {
@@ -142,7 +145,7 @@ void LowFreqPWM(void)
         GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4); // turn off ssr out
 
     //--------------------SSR3---------------------------------------
-    /*    if (PWMSSR2Enable)
+    /*    if (PWMSSR3Enable)
      {
      if (dutyCount_SSR3 < (uint32_t) Steam_CNTL.Out)
      GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5);

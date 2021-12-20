@@ -283,7 +283,8 @@ void ReadTxFiFO(void)
         {
             if (tx_head != tx_tail)
             {
-                SSIDataPut(SSI0_BASE, ui8TxBuf[tx_head]);
+                uint32_t ui32Data = ui8TxBuf[tx_head];
+                SSIDataPut(SSI0_BASE, ui32Data);
 
                 if (tx_head == (MEM_BUFFER_SIZE - 1))
                     tx_head = 0;

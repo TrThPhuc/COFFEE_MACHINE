@@ -65,7 +65,7 @@ void FlowMeterCal()
         QEIIntClear(QEI0_BASE, QEI_INTTIMER);
         uint32_t temp;
         temp = QEIPositionGet(QEI0_BASE);
-        MilliLitresBuffer = (float) temp * Calibration;
+       MilliLitresBuffer = (float) temp * Calibration;
         if ((MilliLitresBuffer >= SetVolume) && (FinishPumpEvent == false))
         {
             // Stop pumping direct not through swept function
