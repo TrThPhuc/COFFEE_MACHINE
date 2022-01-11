@@ -37,18 +37,39 @@
 //#define SaveEeprom
 struct AmountofWater
 {
-    uint16_t stage_1;   //  Low flow
-    uint16_t stage_2;   //  High flow
+    uint32_t stage_1;   //  Low flow
+    uint32_t stage_2;   //  High flow
 };
 typedef struct Mode_Parameter
 {
-    uint16_t PreInfusion;    // Pre-Infusion Time - second
-    uint16_t Time;           // Time for extraction - second
+    uint32_t PreInfusion;           // Pre-Infusion Time. Uint - second
+    uint32_t Time;                  // Time for extraction  Uinit - second
 
     struct AmountofWater AmountOfWaterPumping;
-    uint16_t GrindingDuration;  // Grinding interval
-    bool DirGrinding; // CW or CCW Grinding
+    uint32_t GrindingDuration;      // Grinding interval. Uint - 0.1s
+    uint32_t WeigtOfPowder;         //  Weight of coffe powder - g
+    bool DirGrinding;               // CW or CCW Grinding
+
+    uint16_t Cups;                  // Number of Cups
 
 } Mode_Parameter_t;
 void ParameterDefaultSetting();
+
+enum GuiParamter
+{
+    cupsEspresso_1,
+    cupsEspresso_2,
+    cupsSpecial_1,
+    cupsSpecial_2,
+    HotWaterTemp,
+    ExtractionTime,
+    BladeNofTimesUsed,
+    RonNofTimesUsed,
+    Brand,
+    SeriNumber,
+    Model,
+    ProductDate,
+
+};
+
 #endif /* COFFEE_MACHINE_H_ */

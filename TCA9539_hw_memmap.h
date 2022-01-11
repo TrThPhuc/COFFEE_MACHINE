@@ -14,8 +14,8 @@
 #define Down_Bt                 0x04
 #define Expresso1_Bt            0x08
 #define Expresso2_Bt            0x20
-#define Decatt1_Bt              0x10
-#define Decatt2_Bt              0x40
+#define Special1_Bt              0x10
+#define Special2_Bt              0x40
 #define Cancel_Task             0x80
 
 #define LED_BT8                 0x100
@@ -43,15 +43,15 @@
 #define Alarm_BLDC_2            0x8000
 
 // TCA9539 IC 3
-#define Valve_2                  0x10
+#define Valve_1                 0x10 // Valve 1
 #define Alarm_BLDC_1            0x20
 #define Brake_BLDC1             0x40
 #define Enable_BLDC1            0x80
 
 #define Direction_BLDC1         0x100
-#define Valve_1                 0x200 // Valve_1
+#define Valve_3                 0x200 // Valve_3
 #define SpeedFeedBack_BLDC1     0x400
-#define Valve_3                 0x800 //Valve_1
+#define Valve_2                 0x800 // Valve_2
 #define LinitSwitch             0x1000
 #define LevelSensor1            0x2000
 #define LevelSensor2            0x4000

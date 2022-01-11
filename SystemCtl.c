@@ -6,6 +6,7 @@
  */
 #include "stdbool.h"
 #include "stdint.h"
+
 #include "driverlib/sysctl.h"
 #include "driverlib/timer.h"
 #include "driverlib/interrupt.h"
@@ -81,7 +82,7 @@ void TimerSysClt(void)
     TimerIntEnable(TIMER3_BASE, TIMER_TIMA_TIMEOUT);
     TimerIntEnable(TIMER5_BASE, TIMER_TIMA_TIMEOUT);
 
-    TimerControlTrigger(TIMER0_BASE, TIMER_A, true);
+
 
     // TimerInt of Timmingprocess will enable when initalizing task which need to timming
 

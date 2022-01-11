@@ -17,23 +17,29 @@
 #include "TCA9539.h"
 #include "PID.h"
 
-#define Shutdown_Temp_Steam 120
-#define Shutdown_Temp_HotWater 95
+#define Shutdown_Temp_Steam 120.0f
+#define Shutdown_Temp_HotWater 98.0f
 
 #define PID_method
 extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
 extern CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
 extern void ADS1118_Cal(ADS1118_t*);
-extern float Steam_Vout, HotWater_Vout;
+extern float Steam_Vout, HotWater_Vout, Extrude_Vout;
 extern void Led_Display();
 extern volatile uint8_t In_TxBrust;
 
 extern ADS1118_t Steam, Hot_Water;
 _Bool PWMSSR1Enable, PWMSSR2Enable, PWMSSR3Enable;
+_Bool SteamMask, HotWaterMask, ExtrudeMask;
+_Bool ErSteam, ErHotWater, ErExtrude;
 
 ADS1118_t *Temp_ptr;
 // True task 125ms
 extern uint16_t counttest;
+float SteamTempBuffer[4], HotWaterTempBuffer[4];
+float tempvalue;
+extern float Gui_TempSteam, Gui_HotWaterSteam;
+
 uint16_t dutyCount_SSR1 = 0, dutyCount_SSR2 = 0, dutyCount_SSR3 = 0;
 uint16_t activeDuty_SRR1 = 0, activeDuty_SRR2 = 0, activeDuty_SRR3 = 0;
 void LowFreqPWM(void);
@@ -41,27 +47,42 @@ void LowFreqPWM(void);
 void Temperature_Control(void)
 {
 
-    if (TimerIntStatus(TIMER3_BASE, true) == TIMER_TIMA_TIMEOUT)
+    if (TimerIntStatus(TIMER3_BASE, true) == TIMER_TIMA_TIMEOUT)    // 0.125s
     {
 
         static uint16_t scale = 0;
         TimerIntClear(TIMER3_BASE, TIMER_TIMA_TIMEOUT);
-        counttest = scale;
+
         if (scale >= 4)  // Sacle to task 0.5s
         {
             scale = 0;
+            counttest++;
+            if (counttest >= 4)
+                counttest = 0;
 #ifdef PID_method
             if (PWMSSR1Enable)
                 CNTL_2P2Z(&Steam_CNTL);
-            // CNTL_2P2Z(&HotWater_CNTL);
+            if (PWMSSR2Enable)
+                CNTL_2P2Z(&HotWater_CNTL);
 #endif
+            SteamTempBuffer[counttest] = Steam.Actual_temperature;
+            tempvalue = 0;
+            int i;
+            for (i = 0; i < 4; i++)
+                tempvalue += SteamTempBuffer[i];
+            Gui_TempSteam = tempvalue / 4;
 
+            HotWaterTempBuffer[counttest] = Hot_Water.Actual_temperature;
+            tempvalue = 0;
+            for (i = 0; i < 4; i++)
+                tempvalue += HotWaterTempBuffer[i];
+            Gui_HotWaterSteam = tempvalue / 4;
         }
         else
         {
             switch (scale)
             {
-            case 0:     // request hot data of steam, read cold data of preveous
+            case 0: // request hot data of steam, read cold data of preveous    //0.25
             case 1:
                 Temp_ptr = &Steam; // request cold data of steam, read hot data of steam
                 break;
@@ -77,18 +98,14 @@ void Temperature_Control(void)
 
         }
         // Shutdow if overshoot termperature
-        /*
-         if (Steam.Actual_temperature >= Shutdown_Temp_Steam)
-         PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);
-         else
-         PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, true);
-         if (Steam.Actual_temperature >= Shutdown_Temp_Steam)
-         PWMOutputState(PWM0_BASE, PWM_OUT_4_BIT, false);
-         else
-         PWMOutputState(PWM0_BASE, PWM_OUT_4_BIT, true);
-         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3_BIT, (uint32_t) Steam_Vout);
-         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4_BIT, (uint32_t) HotWater_Vout);
-         */
+        if (Hot_Water.Actual_temperature >= Shutdown_Temp_HotWater)
+        {
+            HotWaterMask = 1;
+            GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0);
+            ErHotWater = (Hot_Water.Actual_temperature == 0xA5A5) ? 1 : 0;
+        }
+        else
+            HotWaterMask = 0;
 
         TCA9539_IC1.updateOutputFlag = 1;
         TCA9539_IC2.updateOutputFlag = 1;
@@ -104,8 +121,8 @@ void Temperature_Control(void)
 void LowFreqPWM(void)
 {
     TimerIntClear(TIMER5_BASE, TIMER_TIMA_TIMEOUT);
-    //--------------------SSR1---------------------------------------
-    if (PWMSSR1Enable)
+//--------------------SSR1---------------------------------------
+    if (PWMSSR1Enable && !SteamMask)
     {
 
         if (dutyCount_SSR1 == activeDuty_SRR1)
@@ -123,8 +140,8 @@ void LowFreqPWM(void)
     else
         GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_PIN_5);
 
-    //--------------------SSR2---------------------------------------
-    if (PWMSSR2Enable)
+//--------------------SSR2---------------------------------------
+    if (PWMSSR2Enable && !HotWaterMask)
     {
         if (dutyCount_SSR2 == activeDuty_SRR2)
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0); // turn on ssr out
@@ -144,13 +161,26 @@ void LowFreqPWM(void)
     else
         GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4); // turn off ssr out
 
-    //--------------------SSR3---------------------------------------
-    /*    if (PWMSSR3Enable)
-     {
-     if (dutyCount_SSR3 < (uint32_t) Steam_CNTL.Out)
-     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5);
-     else
-     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0);
-     }*/
+//--------------------SSR3---------------------------------------
+    if (PWMSSR3Enable && !ExtrudeMask)
+    {
+        /*        if (dutyCount_SSR3 < (uint32_t) Steam_CNTL.Out)
+         GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5);
+         else
+         GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0);*/
+        if (dutyCount_SSR3 == activeDuty_SRR3)
+            GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0); // turn on ssr out
+        if (dutyCount_SSR3 < 100)
+        {
+            dutyCount_SSR3++;
+
+        }
+        else
+        {
+            GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5); // turn off ssr out
+            activeDuty_SRR3 = 100 - Extrude_Vout; //Shadow Update to active when counter match period
+            dutyCount_SSR3 = 0;
+        }
+    }
 
 }

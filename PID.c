@@ -21,7 +21,7 @@ void CNTL_Pole_Zero_Cal(CNTL_2P2Z_Terminal_t *CNTL, uint32_t Pgain_Gui,
     CNTL->Coef.b1 = (Igain - Pgain - Dgain - Dgain);
     CNTL->Coef.b0 = (Pgain + Igain + Dgain);
     CNTL->Coef.a2 = 0.0;
-    CNTL->Coef.a1 = 0.82;
+    CNTL->Coef.a1 = 1;
     CNTL->Coef.max = max;
     CNTL->Coef.min = min;
     CNTL->Coef.i_min = i_min;
@@ -29,8 +29,9 @@ void CNTL_Pole_Zero_Cal(CNTL_2P2Z_Terminal_t *CNTL, uint32_t Pgain_Gui,
 }
 void CNTL_2P2Z(CNTL_2P2Z_Terminal_t *CNTL)
 {
-    // The controll law:
+    // The controll law 2P2Z:
 //out = e(n-2)*b2 + e(n-1)*b1 + e*b0 + u(n-2)*a2 + u(n-1)*a1
+
     if (CNTL->coef_change == 0)
     {
 
@@ -46,8 +47,8 @@ void CNTL_2P2Z(CNTL_2P2Z_Terminal_t *CNTL)
         ACC += CNTL->DBUFF.U2 * CNTL->Coef.a2; // ACC = e(n-2)*b2 + e(n-1)*b1 + e*b0 + u(n-2)*a2
         CNTL->DBUFF.U2 = CNTL->DBUFF.U1;            // u(n-2) = u(n-1);
         ACC += CNTL->DBUFF.U1 * CNTL->Coef.a1; // ACC = e(n-2)*b2 + e(n-1)*b1 + e*b0 + u(n-2)*a2 + u(n-1)*a1
-        if (CNTL->DBUFF.e <= 0)
-            ACC = 0;
+/*        if (CNTL->DBUFF.e <= 0)
+            ACC = 0;*/
 
         if (ACC > CNTL->Coef.max)                   // (max > ACC > i_min)
             ACC = CNTL->Coef.max;

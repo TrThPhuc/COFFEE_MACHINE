@@ -67,7 +67,6 @@ __error__(char *pcFilename, uint32_t ui32Line)
 // Constant string
 const char *Producer = "Davi Engineering";
 const char *SerialProduct = "xx";
-const char *Model = "xx";
 uint32_t clockrate; // System clock
 uint32_t EEPROMInitStastus;
 // ---------------------------------- USER --------------------------------------------------
@@ -83,21 +82,26 @@ uint32_t Dmax_HotWater;
 uint8_t coefSteam_change, coefHotWater_change;    ////////////////
 float Steam_Temperature_Ref, Steam_Vout;
 float HotWater_Temperature_Ref, HotWater_Vout;
+float Extrude_Vout;
+float Gui_TempSteam, Gui_HotWaterSteam, Gui_CoffeExtractionTime;
 CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
-uint16_t PitchOfpress;
+uint32_t PitchOfpress;
 
 uint16_t Process_status;    ////////////
 uint16_t SumOfCupInUsed = 0;
 uint16_t SumOfCupInUsed_day = 0;
 uint16_t Blade, Ron;    //Used times of Blade and Ron
 // Mode parameter
-Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Decatt_1, Mode_Decatt_2;
+Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Special_1,
+        Mode_Special_2;
 Mode_Parameter_t *ModeSelected;
+float PulWeightRatio = 25;
+
 bool cancel_cmd, test_step = 0;    // cancel command
 // Temperature monitor/GUI-
-/*float Steam_Temp_Gui;
- float HotWater_Temp_Gui;
- float PressHeating_Temp_Gui;*/
+        /*float Steam_Temp_Gui;
+         float HotWater_Temp_Gui;
+         float PressHeating_Temp_Gui;*/
 // ---------------------------------- LCD Interface -----------------------------------------
 // Reset LCD - PA6
 #define SET_RST     GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_6, GPIO_PIN_6)
@@ -137,7 +141,7 @@ void LCD_Disp_Clr(uint8_t dat);     // Clear LCD
 //Variable
 extern uint8_t LCD_IMAGE[1024];
 uint16_t *dataSentList[16]; // Terminal connect to monitor variable
-uint16_t *Pr_Packet[24];    // Terminal connect to Parameter
+uint32_t *Pr_Packet[32];    // Terminal connect to Parameter
 uint8_t coeff_change;   // Flag for change parameter in mode /////////
 int16_t VrTimer1[4];    // Virtual timer
 extern const unsigned char ascii_table_5x8[95][5]; // Bit Map for ASCII table (ASCII_Font.c)
@@ -174,8 +178,8 @@ extern volatile uint8_t Tx_slavecount, Tx_usedBrust;
 extern volatile uint8_t Rx_slavecount, Rx_usedBrust;
 // ------------------------------------- Flow Meter ---------------------------------------------
 float Calibration; // Coeficient for calculate vollume pump
-volatile uint32_t totalMilliLitres, MilliLitresBuffer;
-uint32_t SetVolume;
+volatile float totalMilliLitres, MilliLitresBuffer;
+float SetVolume;
 volatile bool FinishPumpEvent = false;
 void QEP_CoffeeMachine_cnf(void);
 void FlowMeterCal(void);
@@ -192,12 +196,13 @@ extern void SteamLevelControl_Stop(void *PrPtr);
 // Configure 3 pwm chanel for 3 BLDC motor
 void PWMDRV_Coffee_machine_cnf(void);
 // -------------------------------- ADC DMA function define ---------------------------------------
-void ADC_uDMA_Cfg(void);
-void ADC_uDMA_READ(void);
-extern float ui32AverageResult;
+void ADC_Cfg(void);
+void ADC_READ(void);
+extern float fADC_LevelSensor;
 extern volatile bool LevelControlTriger, InLevelPumping;
 extern void SteamLevelControl_Run(void *PrPtr);
 extern void SteamLevelControl_Stop(void *PrPtr);
+extern _Bool PWMSSR1Enable, PWMSSR2Enable, PWMSSR3Enable;
 // -------------------------------------- Group Task --------------------------------------------
 void (*A_Group_Task)(void); // 2ms Task
 void (*B_Group_Task)(void); // 5ms Task
@@ -218,14 +223,18 @@ void C2(void);
 
 uint16_t parameter[10] = { };
 extern void MakeCoffee(void);
+extern void StartUpMachine(void);
 extern void MakeCoffeProcess(void);
-extern bool InProcess;
+extern void StartUpProcess(void);
+extern bool InProcess, InStartUp, calibVolumeFlag;
+extern volatile uint8_t step;
 uint32_t duty = 100;
 
 void HomeReturn_Process_Run(void *PrPtr);
 uint16_t speedtest = 2000;
+uint8_t flag_test;
+float m = 0.9;
 void main(int argc, char **argv)
-
 {
     // Initialize Device/board include:
     // + Disable Wdog timer, Disable interrupt
@@ -263,25 +272,32 @@ void main(int argc, char **argv)
     //Temperature Control terminal assign - Steam
     CNTL_2P2Z_DBUFF_t Default = { 0, 0, 0, 0, 0 };
     Steam_CNTL.DBUFF = Default;     // Internal buffer
-    Steam_CNTL.Ref = &Steam_Temperature_Ref; //Desired temperature(reference signal)
-    Steam_CNTL.Fdbk = &Steam.Actual_temperature; // Acutal temperature(feedback signal)
-    // Steam_CNTL.Out = &Steam_Vout;   // Control output
+    //  Steam_CNTL.Ref = &Steam_Temperature_Ref; //Desired temperature(reference signal)
+    Steam_CNTL.Ref = &SetVolume;
+
+    //   Steam_CNTL.Fdbk = &Steam.Actual_temperature; // Acutal temperature(feedback signal)
+    Steam_CNTL.Fdbk = &MilliLitresBuffer; // Acutal temperature(feedback signal)
+    Steam_CNTL.Out = &Steam_Vout;   // Control output
     Dmax_Steam = Dmax_HotWater = 100;
     Pgain_Steam = 500;
-    Igain_Steam = 600;
+    Igain_Steam = 100;
     Dgain_Steam = 0;
-    CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam,
-                       Dmax_Steam, -120, 0);
+    CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam, 7999,
+                       -10, 0);
 
     Hot_Water.Code = ADSCON_CH1; // Assign code channel 0 ADS1118 temperature sensor
     Hot_Water.Actual_temperature = 0;
     //Temperature Control terminal assign - Hot water tank
+    HotWater_CNTL.DBUFF = Default; // Internal buffer
     HotWater_CNTL.Ref = &HotWater_Temperature_Ref; //Desired temperature(reference signal)
     HotWater_CNTL.Fdbk = &Hot_Water.Actual_temperature; // Acutal temperature(feedback signal)
-    // HotWater_CNTL.Out = &HotWater_Vout; // Contol output
-    HotWater_CNTL.DBUFF = Default; // Internal buffer
+    HotWater_CNTL.Out = &HotWater_Vout; // Contol output
+
+    Pgain_HotWater = 800;
+    Igain_HotWater = 950;
+    Dgain_HotWater = 200;
     CNTL_Pole_Zero_Cal(&HotWater_CNTL, Pgain_HotWater, Igain_HotWater,
-                       Dgain_HotWater, Dmax_HotWater, -120, 0);
+                       Dgain_HotWater, Dmax_HotWater, -10, 0);
 
 //=================================================================================
 //  Configure PWMs for coffe machine
@@ -323,6 +339,7 @@ void main(int argc, char **argv)
 
 // ------------------------------  Configure QEI ----------------------------------
     QEP_CoffeeMachine_cnf();
+    // InitPumpingEvent();
     Calibration = (float) 2 / 15.0;
 //=================================================================================
 //  INITIALISATION - LCD-Display connections
@@ -335,50 +352,67 @@ void main(int argc, char **argv)
     // Initialize GUI interface
     SerialCommsInit();
     // Assign data stream to Gui variable display LCD - Display on Page 0 LCD
-    dataSentList[0] = &countcup;   //&SumOfCupInUsed;
-    dataSentList[1] = &SumOfCupInUsed_day;
-    dataSentList[2] = &Blade;
-    dataSentList[3] = &Ron;
+    dataSentList[cupsEspresso_1] = &Mode_Espresso_1.Cups;   //&SumOfCupInUsed;
+    dataSentList[cupsEspresso_2] = &Mode_Espresso_2.Cups;
+
+    dataSentList[cupsSpecial_1] = &Mode_Special_1.Cups;
+
+    dataSentList[cupsSpecial_2] = &Mode_Special_2.Cups;
+    dataSentList[BladeNofTimesUsed] = &Blade;
+    dataSentList[RonNofTimesUsed] = &Ron;
+
+    dataSentList[HotWaterTemp] = (uint16_t*) &Gui_HotWaterSteam;
+    dataSentList[ExtractionTime] = (uint16_t*) &Gui_CoffeExtractionTime;
+
     //"Set" variables
     //---------------------------------------
     // Assign GUI parameter  to desired  parameter setting addresses
     Pr_Packet[0] = &Mode_Espresso_1.PreInfusion;
     Pr_Packet[1] = &Mode_Espresso_1.Time;
-    Pr_Packet[2] = &Mode_Espresso_1.GrindingDuration;
-    Pr_Packet[3] = &Mode_Espresso_1.AmountOfWaterPumping.stage_1;
+    Pr_Packet[2] = &Mode_Espresso_1.WeigtOfPowder;
+    Pr_Packet[3] = &Mode_Espresso_1.GrindingDuration;
 
-    Pr_Packet[4] = (uint16_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[5] = &PitchOfpress;
+    Pr_Packet[4] = &Mode_Espresso_1.AmountOfWaterPumping.stage_1;
+
+    Pr_Packet[5] = (uint32_t*) &HotWater_Temperature_Ref;
+    Pr_Packet[6] = &PitchOfpress;
 
     // Pr_Packet[3] = &Mode_Espresso_1.AmountOfWaterPumping.stage_2;
 
-    Pr_Packet[6] = &Mode_Espresso_2.PreInfusion;
-    Pr_Packet[7] = &Mode_Espresso_2.Time;
-    Pr_Packet[8] = &Mode_Espresso_2.GrindingDuration;
-    Pr_Packet[9] = &Mode_Espresso_2.AmountOfWaterPumping.stage_1;
+    Pr_Packet[8] = &Mode_Espresso_2.PreInfusion;
+    Pr_Packet[9] = &Mode_Espresso_2.Time;
+    Pr_Packet[10] = &Mode_Espresso_1.WeigtOfPowder;
+    Pr_Packet[11] = &Mode_Espresso_2.GrindingDuration;
 
-    Pr_Packet[10] = (uint16_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[11] = &PitchOfpress;
+    Pr_Packet[12] = &Mode_Espresso_2.AmountOfWaterPumping.stage_1;
 
-    Pr_Packet[12] = &Mode_Decatt_1.PreInfusion;
-    Pr_Packet[13] = &Mode_Decatt_1.Time;
-    Pr_Packet[14] = &Mode_Decatt_1.GrindingDuration;
-    Pr_Packet[15] = &Mode_Decatt_1.AmountOfWaterPumping.stage_1;
+    Pr_Packet[13] = (uint32_t*) &HotWater_Temperature_Ref;
 
-    Pr_Packet[16] = (uint16_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[17] = &PitchOfpress;
+    Pr_Packet[14] = &PitchOfpress;
 
-    Pr_Packet[18] = &Mode_Decatt_2.PreInfusion;
-    Pr_Packet[19] = &Mode_Decatt_2.Time;
-    Pr_Packet[20] = &Mode_Decatt_2.GrindingDuration;
-    Pr_Packet[21] = &Mode_Decatt_2.AmountOfWaterPumping.stage_1;
+    Pr_Packet[16] = &Mode_Special_1.PreInfusion;
+    Pr_Packet[17] = &Mode_Special_1.Time;
+    Pr_Packet[18] = &Mode_Espresso_1.WeigtOfPowder;
+    Pr_Packet[19] = &Mode_Special_1.GrindingDuration;
 
-    Pr_Packet[22] = (uint16_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[23] = &PitchOfpress;
+    Pr_Packet[20] = &Mode_Special_1.AmountOfWaterPumping.stage_1;
 
+    Pr_Packet[21] = (uint32_t*) &HotWater_Temperature_Ref;
+    Pr_Packet[22] = &PitchOfpress;
+
+    Pr_Packet[24] = &Mode_Special_2.PreInfusion;
+    Pr_Packet[25] = &Mode_Special_2.Time;
+    Pr_Packet[26] = &Mode_Espresso_1.WeigtOfPowder;
+    Pr_Packet[27] = &Mode_Special_2.GrindingDuration;
+
+    Pr_Packet[28] = &Mode_Special_2.AmountOfWaterPumping.stage_1;
+
+    Pr_Packet[29] = (uint32_t*) &HotWater_Temperature_Ref;
+    Pr_Packet[30] = &PitchOfpress;
+    Pr_Packet[31] = (uint32_t*) &PulWeightRatio;
     // Assign direction motor of grind module
-    Mode_Espresso_1.DirGrinding = Mode_Espresso_2.DirGrinding = true;
-    Mode_Decatt_1.DirGrinding = Mode_Decatt_2.DirGrinding = false;
+    Mode_Espresso_1.DirGrinding = Mode_Espresso_2.DirGrinding = false;
+    Mode_Special_1.DirGrinding = Mode_Special_2.DirGrinding = true;
 
 //=============================Configure machine Parameter ========================================
     ParameterDefaultSetting();
@@ -396,8 +430,8 @@ void main(int argc, char **argv)
         *Pr_Packet[i] = ui16Ptr[i];
     }
 #endif
-//===================================ADC DMA COnfig================================================
-    ADC_uDMA_Cfg();
+//===================================ADC DMA Config================================================
+    ADC_Cfg();
 
 //===================================Enable And start System ======================================
     TimerEnable(TIMER0_BASE, TIMER_A);
@@ -416,9 +450,13 @@ void main(int argc, char **argv)
     TCA9539Init(&TCA9539_IC3);
     TCA9539Init(&TCA9539_IC2);
     TCA9539Init(&TCA9539_IC1);
-    /*       uint32_t speed = PWMGenPeriodGet(PWM0_BASE, PWM_GEN_1);
-     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, speed / 2);
-     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);*/
+
+    // Enable Control temerature of steam and Hotwater tank
+    PWMSSR2Enable = 1;
+    PWMSSR3Enable = 1;
+    Extrude_Vout = 5;
+
+    StartUpMachine();
     while (1)
     {
 
@@ -465,7 +503,7 @@ void C_Base(void)
 // Task 2ms -  display LCD & receive cmd from button LCD
 void A1(void)
 {
-    // Communicate and display LCD
+// Communicate and display LCD
     SerialHostComms();
     A_Group_Task = &A2;
 
@@ -473,7 +511,7 @@ void A1(void)
 // Task 2ms - Read input from extend GPIO ic TC9539
 void A2(void)
 {
-    // When signal change TCA595 wil generate interrupt and  ISR will set ReadCmdFlag
+// When signal change TCA595 wil generate interrupt and  ISR will set ReadCmdFlag
     if (TCA9539_IC1.ReadCmdFlag && !I2CMasterBusBusy(I2C0_BASE))
         Cmd_WriteMsg((void (*)(void*)) TCA9539ReadInputReg,
                      (void*) &TCA9539_IC1);
@@ -504,7 +542,7 @@ void A2(void)
 void B1(void)
 {
 
-    // Hardware limit switch - FORCE output low
+// Hardware limit switch - FORCE output low
     uint16_t LSW = TCA9539_IC3.TCA9539_Input.all & LinitSwitch;
     uint16_t RSW = TCA9539_IC3.TCA9539_Input.all & LevelSensor1;
     uint16_t Dir = TCA9539_IC2.TCA9539_Onput.all & Direction_BLDC2;
@@ -528,17 +566,18 @@ void B1(void)
         }
     }
 
-    // Scan to output TCA
+// Scan to output TCA
 
     if (InProcess)
         B_Group_Task = &MakeCoffeProcess;
+
+    else if (InStartUp)
+        B_Group_Task = &StartUpProcess;
     else
         B_Group_Task = &B2;
 }
 void B2(void)
 {
-
-    ADC_uDMA_READ();
 
     B_Group_Task = &B1;
 }
@@ -546,29 +585,32 @@ void B2(void)
 void C1(void)
 {
 // ----------------------------------------Button GUI------------------------------//
-    // Select mode and make coffe
+// Select mode and make coffe
 
     static uint8_t release_mode = 1, release = 0;
-    if ((InProcess == 0) && (release_mode == 1) && (readyRun == 1))
+    static uint32_t Vrtimer;
+    _Bool En = readyRun && ~InStartUp;
+    if ((InProcess == 0) && (release_mode == 1) && (En == 1))
     {
-        if ((TCA9539_IC1.TCA9539_Input.all & Decatt1_Bt) == 0)
+        if ((TCA9539_IC1.TCA9539_Input.all & Special1_Bt) == 0)
         {
-            ModeSelected = &Mode_Decatt_1;
+            ModeSelected = &Mode_Special_1;
             // TCA9539_IC1.TCA9539_Onput.all &= LED_BT5;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT5;
             id_Page0 = 7;
-            test_step = 1;
+            //test_step = 1;
             MakeCoffee();
             release_mode = 0;
 
         }
-        else if ((TCA9539_IC1.TCA9539_Input.all & Decatt2_Bt) == 0)
+        else if ((TCA9539_IC1.TCA9539_Input.all & Special2_Bt) == 0)
         {
-            ModeSelected = &Mode_Decatt_2;
+            ModeSelected = &Mode_Special_2;
             //   TCA9539_IC1.TCA9539_Onput.all &= LED_BT7;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT7;
             id_Page0 = 8;
             test_step = 1;
+            step = 0;
             MakeCoffee();
             release_mode = 0;
         }
@@ -578,7 +620,7 @@ void C1(void)
             //     TCA9539_IC1.TCA9539_Onput.all &= LED_BT4;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT4;
             id_Page0 = 5;
-            test_step = 1;
+            // test_step = 1;
             MakeCoffee();
             release_mode = 0;
         }
@@ -589,11 +631,12 @@ void C1(void)
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT6;
             id_Page0 = 6;
             test_step = 1;
+            step = 0;
             MakeCoffee();
             release_mode = 0;
         }
     }
-    //------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------
     if ((InProcess == 1) && (release == 1) && (cancel_cmd == 0))
     {
         if ((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) == 0)
@@ -607,15 +650,23 @@ void C1(void)
     if ((TCA9539_IC1.TCA9539_Input.all & 0x78) == 0x78)
     {   // all button make coffe release
         release_mode = 1;
-        if (InProcess == 0 || cancel_cmd == 1)
+        if (InProcess == 0)
         {
             id_Page0 = 0;
             TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT4 | LED_BT5 | LED_BT6
                     | LED_BT7);
         }
-
+        Vrtimer = 0;
     }
-    //--------------------------------Release Button Right Pannel-------------------------------------
+    else
+        Vrtimer++;
+    if ((Vrtimer > 25) && (calibVolumeFlag == 0) && (InProcess == 1))
+    {
+        calibVolumeFlag = 1;
+        Vrtimer = 0;
+    }
+
+//--------------------------------Release Button Right Pannel-------------------------------------
     if (((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) != 0)
             && (InProcess == 0)) // Button cancel release
     {
@@ -628,51 +679,52 @@ void C1(void)
 // Task 50ms - Control level
 void C2(void)
 {
-    /*    if ((TCA9539_IC3.TCA9539_Input.all & LevelSensor1) == 0)
-     Cmd_WriteMsg(&SteamLevelControl_Run, Null);
-     else
-     Cmd_WriteMsg(&SteamLevelControl_Stop, Null);*/
-
-    // Start pumping water to steam tank
-    if (ui32AverageResult > (float) 2.2 && (InLevelPumping == 0))
+    ADC_READ();
+// Start pumping water to steam tank
+    if (fADC_LevelSensor > (float) 2.2 && (InLevelPumping == 0))
     {
         LevelControlTriger = InLevelPumping = 1;
-        Cmd_WriteMsg(SteamLevelControl_Run, NULL);
+        // Cmd_WriteMsg(SteamLevelControl_Run, NULL);
     }
     // Stop pumping water to steam tank
-    else if ((ui32AverageResult < (float) 1.5) && (InLevelPumping == 1))
+    else if ((fADC_LevelSensor < (float) 1.5) && (InLevelPumping == 1))
     {
 
-        Cmd_WriteMsg(SteamLevelControl_Stop, NULL);
+        //Cmd_WriteMsg(SteamLevelControl_Stop, NULL);
     }
 
     if (coefSteam_change)
     {
         CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam,
-                           Dmax_Steam, -5, 0);
+                           7999, -10, 0);
         coefSteam_change = 0;
     }
     if (coefHotWater_change)
     {
         CNTL_Pole_Zero_Cal(&HotWater_CNTL, Pgain_HotWater, Igain_HotWater,
-                           Dgain_HotWater, Dmax_HotWater, -5, 0);
+                           Dgain_HotWater, Dmax_HotWater, -10, 0);
         coefHotWater_change = 0;
     }
+    if (Hot_Water.Actual_temperature >= (HotWater_Temperature_Ref - 4))
+        HotWater_CNTL.Coef.a1 = m;
+    else
+        HotWater_CNTL.Coef.a1 = 1;
+
     C_Group_Task = &C1;
 }
 //======================================================================================================
 void Spi0_LCD_Interface_Cnf()
 {
-    // Configurate pin mux for SSI(SPI) peripheral function
+// Configurate pin mux for SSI(SPI) peripheral function
     GPIOPinConfigure(GPIO_PA2_SSI0CLK);
     GPIOPinConfigure(GPIO_PA3_SSI0FSS);
     GPIOPinConfigure(GPIO_PA4_SSI0RX);
     GPIOPinConfigure(GPIO_PA5_SSI0TX);
     SSIClockSourceSet(SSI0_BASE, SSI_CLOCK_SYSTEM);
-    // Confige Mode 0 SSI, Freq = 15Mhz, 8Bit
+// Confige Mode 0 SSI, Freq = 15Mhz, 8Bit
     SSIConfigSetExpClk(SSI0_BASE, 80000000, SSI_FRF_MOTO_MODE_0,
     SSI_MODE_MASTER,
-                       10000000, 8);
+                       15000000, 8);
 #ifdef Int_SSI0
     SSIIntRegister(SSI0_BASE, &ReadTxFiFO);
     SSIIntEnable(SSI0_BASE, SSI_TXFF);
@@ -689,19 +741,19 @@ void Spi0_LCD_Interface_Cnf()
 
 #endif
 
-    //SSILoopbackEnable(SSI0_BASE);
+//SSILoopbackEnable(SSI0_BASE);
 
 }
 void LCD_Interface_Cnf()
 {
     Spi0_LCD_Interface_Cnf();   // Used interrupt method for transmit
-    // IntEnable(INT_SSI0);
-    // Configurate Pin for proper ssi
+// IntEnable(INT_SSI0);
+// Configurate Pin for proper ssi
     GPIOPinTypeSSI(GPIO_PORTA_BASE,
     GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
     SSIEnable(SSI0_BASE);
 
-    // Configurate Pin for other
+// Configurate Pin for other
     /* GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_STRENGTH_12MA,
      GPIO_PIN_TYPE_STD_WPU);*/
     GPIOPadConfigSet(GPIO_PORTA_BASE, GPIO_PIN_6, GPIO_STRENGTH_12MA, //PA6 - LCD_RST
@@ -767,8 +819,8 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
 {
 
     uint8_t i = 0, j, k;
-    // static uint16_t index = 0;
-    // index = (page - 1) * 128 + (column - 1);
+// static uint16_t index = 0;
+// index = (page - 1) * 128 + (column - 1);
 
     while (text[i] > 0x00)
     {
@@ -907,7 +959,7 @@ void Disp_20x20_Image(uint8_t page, uint8_t column, uint8_t *iPtr,
 }
 void disp_bitmap(uint8_t page, uint8_t col, uint8_t *obj)
 {
-    // LCD_Address_Set(page, col);
+// LCD_Address_Set(page, col);
     uint8_t i, j;
     for (i = 0; i < 8; i++)
     {
@@ -1004,7 +1056,7 @@ void ADS1118_Coms(uint16_t config, int mode)
     config = config | 0x8000;
     ui16TxBuf[0] = config;
     ui16TxBuf[1] = config;
-    //   Settingconfig = ((ui16TxBuf[0] & 0x7FFF) | 0x01);
+//   Settingconfig = ((ui16TxBuf[0] & 0x7FFF) | 0x01);
     uDMAChannelEnable(UDMA_CHANNEL_SSI1TX);
     uDMAChannelEnable(UDMA_CHANNEL_SSI1RX);
 
@@ -1019,6 +1071,7 @@ void ADS1118_Cal(ADS1118_t *ADS)
      SysCtlDelay(1333333);
      ADS_Read(0, ADS->Code);     // cold data request, read hot data
      */
+
     if (ADS->swBit)
     {
         ADS_Read(0, ADS->Code);
@@ -1042,7 +1095,7 @@ void Spi1_ADS1118_Interface_Cnf()
     GPIOPinConfigure(GPIO_PF0_SSI1RX);
     GPIOPinConfigure(GPIO_PF1_SSI1TX);
     SSIClockSourceSet(SSI1_BASE, SSI_CLOCK_SYSTEM);
-    // Confige Mode 0 SSI, Freq = 100Khz, 8Bit
+// Confige Mode 0 SSI, Freq = 100Khz, 8Bit
     SSIConfigSetExpClk(SSI1_BASE, 80000000, SSI_FRF_MOTO_MODE_1,
     SSI_MODE_MASTER,
                        250000, 16);

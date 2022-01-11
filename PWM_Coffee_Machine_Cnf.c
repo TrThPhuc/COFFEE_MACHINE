@@ -63,10 +63,6 @@ void PWMDRV_Coffee_machine_cnf(void)
 
     GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_4); // Pumping motor - Generation 1
 
-//  GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_5); // Out SSR1 Steam  - Generation 1
-//  GPIOPinTypePWM(GPIO_PORTE_BASE, GPIO_PIN_4); // Out SSR2 Steam  - Generation 2
-//  GPIOPinTypePWM(GPIO_PORTE_BASE, GPIO_PIN_5); // Out SSR3 Steam  - Generation 2
-
 // Used for low frequency pwm generation
     GPIODirModeSet(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_DIR_MODE_OUT);
     GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_4 | GPIO_PIN_5, GPIO_DIR_MODE_OUT);
@@ -77,20 +73,11 @@ void PWMDRV_Coffee_machine_cnf(void)
     GPIO_STRENGTH_8MA,
                      GPIO_PIN_TYPE_STD);
 
+    GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5);
+    GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4);
+
 //-------------------------Generation 2 - f = 1Khz-----------------------------------
 // SSR 2 - SSR3 (Not used - used low pwm timer trigger)
-    /*
-     PWMGenConfigure(PWM0_BASE, PWM_GEN_2,
-     PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC);
-
-     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_2, 80000);   // Freq = 10Khz
-     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4, 0); // PE4 - Intialize Duty = 0%    // SSR2
-     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_5, 0); // PE5 - Intialize Duty = 0%    // SSR3
-
-     PWMOutputState(PWM0_BASE, PWM_OUT_4_BIT, false);    // Disable output
-     PWMOutputState(PWM0_BASE, PWM_OUT_5_BIT, false);    // Disable output
-
-     PWMGenEnable(PWM0_BASE, PWM_GEN_2);*/
 
 //-------------------------Generation 1 - f = 10Kh-----------------------------------
     //pumping motor & SSR
@@ -120,6 +107,7 @@ void PWMDRV_Coffee_machine_cnf(void)
     PWMGenEnable(PWM0_BASE, PWM_GEN_0);
     PWMOutputInvert(PWM0_BASE, PWM_OUT_1_BIT, true);
     PWMOutputInvert(PWM0_BASE, PWM_OUT_0_BIT, true);
-   PWMOutputInvert(PWM0_BASE, PWM_OUT_2_BIT, true);
+    PWMOutputInvert(PWM0_BASE, PWM_OUT_2_BIT, true);
+
     //PWMOutputInvert(PWM0_BASE, PWM_OUT_3_BIT, true);
 }
