@@ -33,7 +33,7 @@
 #include "driverlib/eeprom.h"
 
 // System define
-#define SysCltEeprom
+//#define SysCltEeprom
 //#define SaveEeprom
 struct AmountofWater
 {
@@ -46,7 +46,7 @@ typedef struct Mode_Parameter
     uint32_t Time;                  // Time for extraction  Uinit - second
 
     struct AmountofWater AmountOfWaterPumping;
-    uint32_t GrindingDuration;      // Grinding interval. Uint - 0.1s
+    float GrindingDuration;      // Grinding interval. Uint - 0.1s
     uint32_t WeigtOfPowder;         //  Weight of coffe powder - g
     bool DirGrinding;               // CW or CCW Grinding
 

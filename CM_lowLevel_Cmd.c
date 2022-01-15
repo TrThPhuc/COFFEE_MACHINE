@@ -29,6 +29,8 @@
 #include "driverlib/qei.h"
 #include "driverlib/gpio.h"
 
+#include "inc/hw_qei.h"
+
 #include "Coffee_Machine.h"
 #include "TCA9539_hw_memmap.h"
 #include "TCA9539.h"
@@ -58,6 +60,8 @@ static bool cancel_storage;
 // Virtual timer for running process
 uint32_t VrTimer_Grinding, VrTimer_Compress, VrTimer_Delay, VrTimer_Pumping,
         VrTimer_Relay;
+float VrTimer_Compensate, Compensate;
+_Bool update;
 void MakeCoffee();
 void CheckingFinish_StepInRuning();
 void MakeCoffeProcess(void);
@@ -66,10 +70,16 @@ void StartUpProcess(void);
 //---------------------------------------
 // Process - Grinding coffee into powder
 volatile bool GrindingTriger, InGrinding;
+void InitFeedbackVel();
+void FeedbackVelGrind(void);
+uint32_t FreQ = 0, ds = 0;
+float vel;
 //---------------------------------------
 // Process - Cluster compress powder coffee
 volatile bool CompressTriger, InCompress;
 uint32_t Pos_Compress;
+uint32_t PitchOfpress;
+void LookUpCompressTime(void);
 //---------------------------------------
 // Process - Pumping Hot water
 volatile bool PumpingTriger, InPumping;
@@ -77,7 +87,7 @@ extern volatile bool FinishPumpEvent;
 uint16_t SpeedDuty_Pump;
 bool calibVolumeFlag, calibVolumeStr;
 extern void InitPumpingEvent();
-extern float SetVolume;
+extern float SetVolume, PulWeightRatio;
 // Millitre pumping water
 extern volatile float totalMilliLitres, MilliLitresBuffer;
 // Relay Timming for turn on/off Valve in Pumping process
@@ -100,7 +110,7 @@ extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
 extern void (*B_Group_Task)(void);   // B task 5ms
 extern void B2(void);
 volatile bool flagdelay = 0;
-uint16_t VrTimer_FlagRelay = 160, ph = 100;
+uint16_t VrTimer_FlagRelay = 100, ph = 100;
 uint16_t Detect = 0;
 void Cmd_WriteMsg(void (*pFun)(void*), void *pArg)
 {
@@ -130,7 +140,7 @@ void Cmd_ReadMsg(void)
     }
     skip: asm("nop:");
 }
-
+float offsetTime;
 void Grinding_Process_Run(void *PrPtr)
 {
     if (InGrinding && GrindingTriger)
@@ -150,13 +160,16 @@ void Grinding_Process_Run(void *PrPtr)
         TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
                 & ~(Enable_BLDC1)) | Enable_BLDC1);
         TCA9539_IC3.updateOutputFlag = 1;
+        InitFeedbackVel();
         // Enable PWM
+        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 80000);   //1Khz
         PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 5000);
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, speedgrind);
         // Calculate grinding time
-        float offsetTime = (Mode->GrindingDuration * 0.1) / UnitTimer;
-        VrTimer_Grinding = (uint32_t) (offsetTime
-                + (Mode->WeigtOfPowder * K_VrTimer_Grinding));
+        offsetTime = (Mode->GrindingDuration) / UnitTimer;
+        VrTimer_Grinding = (uint32_t) (offsetTime);
+
+        pp1 = pp2 = pp3 = ppo = Compensate = 0;
 
     }
 
@@ -190,7 +203,7 @@ void Compress_Process_Run(void *PrPtr)
             TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
                     & ~(Valve_2)) | Valve_2);
         PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, true); // Enable output pwm
-        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 10000);   // Freq = 10Khz
+        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 10000);   // Freq = 8Khz
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 2000);
         VrTimer_Compress = *(uint32_t*) PrPtr;
         TCA9539_IC2.updateOutputFlag = 1;
@@ -220,20 +233,23 @@ void Pumping_Process_Run(void *PrPtr)
                 & ~(Valve_1) | Valve_1));
 
         TCA9539_IC3.updateOutputFlag = 1;
-
         Mode_Parameter_t *Mode = (Mode_Parameter_t*) PrPtr;
+
+        /*        float volume =
+         (Mode->WeigtOfPowder * Mode->AmountOfWaterPumping.stage_1)
+         / (float) PulWeightRatio );*/
+        float volume = Mode->AmountOfWaterPumping.stage_1;
 
         SpeedDuty_Pump = PreInfusion_pump;
 
         //SpeedDuty_Pump = HighPressure_Pump;
-        SetVolume =
-                (!calibVolumeFlag) ?
-                        Mode->AmountOfWaterPumping.stage_1 : MaxVolume
+
+        SetVolume = (!calibVolumeFlag) ? volume : MaxVolume
 
         // Initialize a pump envent to calculate volume
         FinishPumpEvent = false;
         flagdelay = 1;
-        VrTimer_FlagRelay = ph;
+        VrTimer_FlagRelay = Mode->PreInfusion / UnitTimer;     // ph = 100
 
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, SpeedDuty_Pump);
         PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
@@ -253,7 +269,7 @@ void Pumping_Process_Stop(void *PrPtr)
 {
     if (InPumping)
     {
-        Mode_Parameter_t *Mode = (Mode_Parameter_t*) PrPtr;
+        //Mode_Parameter_t *Mode = (Mode_Parameter_t*) PrPtr;
         TCA9539_IC2.TCA9539_Onput.all = (TCA9539_IC2.TCA9539_Onput.all
                 & ~(Enable_BLDC3));
         // Turn off valve 1
@@ -330,9 +346,10 @@ void HomeReturn_Process_Run(void *PrPtr)
         TCA9539_IC2.updateOutputFlag = 1;
         PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, true);
 
-        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 6000);
+        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 6000);    //13.3Khz
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1,
                          PWMGenPeriodGet(PWM0_BASE, PWM_GEN_0) / 2);
+
     }
 }
 void HomeReturn_Process_Stop(void *PrPtr)
@@ -374,8 +391,44 @@ void TimmingPorcess()
     TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
     if (InGrinding)
     {
-        /*        if (VrTimer_Grinding != 0)
-         VrTimer_Grinding--;*/
+        if (avgvel >= sp3)
+        {
+            VrTimer_Compensate += k3;
+            pp3++;
+            update = 1;
+        }
+        else if (avgvel < sp3 && avgvel >= sp2)
+        {
+            VrTimer_Compensate += k2;
+            pp2++;
+            update = 1;
+        }
+        else if (avgvel < sp2 && avgvel >= sp1)
+        {
+            VrTimer_Compensate += k1;
+            update = 1;
+            pp1++;
+        }
+        if (VrTimer_Grinding != 0)
+        {
+
+            VrTimer_Grinding--;
+            ppo++;
+            ppi = (float) ppo * UnitTimer;
+        }
+        if (ppi <= 15.0f)
+        {
+            if ((VrTimer_Grinding == 0) && (VrTimer_Compensate > 0)
+                    && (cancel_cmd != 1))
+            {
+
+                VrTimer_Grinding += (uint32_t) VrTimer_Compensate;
+                Compensate += VrTimer_Compensate;
+                VrTimer_Compensate = 0;
+            }
+        }
+        else
+            VrTimer_Grinding = 0;
 
     }
 
@@ -404,7 +457,7 @@ void TimmingPorcess()
             {
             case 0:
 
-                VrTimer_Relay = 200;
+                VrTimer_Relay = 80;
                 TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
                         & ~(Valve_3)) | Valve_3); //Open Valve 3
                 Step_Relay++;
@@ -446,7 +499,7 @@ void TimmingPorcess()
 }
 void CheckingFinish_StepInRuning()
 {
-    uint32_t speedTemp;
+    //uint32_t speedTemp;
     if (InProcess || InStartUp)
     {
         switch (step)
@@ -463,12 +516,14 @@ void CheckingFinish_StepInRuning()
         case 2: // Gringding coffee
             if (InGrinding)
             {
-                speedTemp = PWMPulseWidthGet(PWM0_BASE, PWM_OUT_0);
-                if ((speedTemp + GringPWMIncrement) <= MaxSpeedGring)
-                {
-                    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0,
-                                     speedTemp + GringPWMIncrement);
-                }
+                /*
+                 speedTemp = PWMPulseWidthGet(PWM0_BASE, PWM_OUT_0);
+                 if ((speedTemp + GringPWMIncrement) <= MaxSpeedGring)
+                 {
+                 PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0,
+                 speedTemp + GringPWMIncrement);
+                 }
+                 */
 
                 if (VrTimer_Grinding == 0)
                 {
@@ -603,9 +658,9 @@ void MakeCoffeProcess(void)
                 (step == 1) ?
                         (Pos_Compress = pos1, TCA9539_IC3.TCA9539_Onput.all =
                                 TCA9539_IC3.TCA9539_Onput.all & ~(Valve_1)) :
-                        (Pos_Compress = pos2);
+                        (LookUpCompressTime(), Pos_Compress = pos2);
                 if (step == 6)
-                    (Pos_Compress = 20);
+                    (Pos_Compress = 50);
                 Cmd_WriteMsg(&Compress_Process_Run, (void*) &Pos_Compress);
 
             }
@@ -776,6 +831,75 @@ void StartUpProcess()
         B_Group_Task = &CheckingFinish_StepInRuning;
     }
 }
+void FeedbackVelGrind(void)
+{
+    if (QEIIntStatus(QEI1_BASE, true) == QEI_INTTIMER)
+    {
+        QEIIntClear(QEI1_BASE, 0x0F);
+        ds = QEIPositionGet(QEI1_BASE);
+        FreQ = QEIVelocityGet(QEI1_BASE);
+        vel = FreQ / 4.0 * 600;
+
+        static uint8_t i = 0;
+        if (i > 8)
+            i = 0;
+        buffervel[i] = vel;
+        uint8_t j;
+        tempv = 0;
+        for (j = 0; j < 8; j++)
+            tempv += buffervel[j];
+        avgvel = tempv / 8;
+        i++;
+    }
+}
+void LookUpCompressTime(void)
+{
+    switch (PitchOfpress)
+    {
+    case 15:
+        pos2 = 292;
+        break;
+    case 16:
+        pos2 = 288;
+        break;
+    case 17:
+        pos2 = 283;
+        break;
+    case 18:
+        pos2 = 278;
+        break;
+    case 19:
+        pos2 = 273;
+        break;
+    }
+}
+void InitFeedbackVel(void)
+{
+    QEIPositionSet(QEI1_BASE, 0x0000);      // Initalize
+    QEIIntClear(QEI1_BASE, 0x0F);   // Clear any interrupt flag
+    QEIIntEnable(QEI1_BASE, QEI_INTTIMER);  // Init interrupt timer out
+    QEIEnable(QEI1_BASE);
+}
+void QEP_VelGrind_Cf(void)
+{
+    QEIDisable(QEI1_BASE);
+    QEIIntDisable(QEI1_BASE,
+    QEI_INTERROR | QEI_INTDIR | QEI_INTTIMER | QEI_INTINDEX);
+
+    GPIOPinConfigure(GPIO_PC5_PHA1);
+    GPIOPinConfigure(GPIO_PC6_PHB1);
+    GPIOPinTypeQEI(GPIO_PORTC_BASE, GPIO_PIN_5 | GPIO_PIN_6);
+
+    QEIVelocityConfigure(QEI1_BASE, QEI_VELDIV_1, 8000000);
+    QEIFilterConfigure(QEI1_BASE, QEI_FILTCNT_16);
+    QEIFilterEnable(QEI1_BASE);
+    QEIVelocityEnable(QEI1_BASE);
+    QEIIntRegister(QEI1_BASE, &FeedbackVelGrind);
+    uint32_t status = QEIIntStatus(QEI1_BASE, true);
+    QEIIntClear(QEI1_BASE, status);
+    QEIEnable(QEI1_BASE);
+}
+
 void CleanProcess()
 {
 

@@ -42,8 +42,8 @@ extern float Gui_TempSteam, Gui_HotWaterSteam;
 
 uint16_t dutyCount_SSR1 = 0, dutyCount_SSR2 = 0, dutyCount_SSR3 = 0;
 uint16_t activeDuty_SRR1 = 0, activeDuty_SRR2 = 0, activeDuty_SRR3 = 0;
+extern void CNTL_Extrude();
 void LowFreqPWM(void);
-
 void Temperature_Control(void)
 {
 
@@ -65,6 +65,8 @@ void Temperature_Control(void)
             if (PWMSSR2Enable)
                 CNTL_2P2Z(&HotWater_CNTL);
 #endif
+            if (PWMSSR3Enable)
+                CNTL_Extrude();
             SteamTempBuffer[counttest] = Steam.Actual_temperature;
             tempvalue = 0;
             int i;
@@ -101,11 +103,21 @@ void Temperature_Control(void)
         if (Hot_Water.Actual_temperature >= Shutdown_Temp_HotWater)
         {
             HotWaterMask = 1;
-            GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0);
-            ErHotWater = (Hot_Water.Actual_temperature == 0xA5A5) ? 1 : 0;
+            GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4);  // turn off
+            ErHotWater =
+                    (Hot_Water.Actual_temperature == 0xA5A5) ? true : false;
         }
         else
             HotWaterMask = 0;
+        if (Steam.Actual_temperature >= Shutdown_Temp_Steam)
+        {
+            SteamMask = 1;
+            GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_PIN_5);
+            ErSteam = (Steam.Actual_temperature == 0xA5A5) ? true : false;
+
+        }
+        else
+            SteamMask = 0;
 
         TCA9539_IC1.updateOutputFlag = 1;
         TCA9539_IC2.updateOutputFlag = 1;
@@ -116,6 +128,10 @@ void Temperature_Control(void)
         TCA9539_IC3.ReadCmdFlag = 1;
 
     }
+
+}
+void ShutDownPWM(void)
+{
 
 }
 void LowFreqPWM(void)
@@ -164,12 +180,11 @@ void LowFreqPWM(void)
 //--------------------SSR3---------------------------------------
     if (PWMSSR3Enable && !ExtrudeMask)
     {
-        /*        if (dutyCount_SSR3 < (uint32_t) Steam_CNTL.Out)
-         GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5);
-         else
-         GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0);*/
         if (dutyCount_SSR3 == activeDuty_SRR3)
+        {
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0); // turn on ssr out
+        }
+
         if (dutyCount_SSR3 < 100)
         {
             dutyCount_SSR3++;
@@ -181,6 +196,9 @@ void LowFreqPWM(void)
             activeDuty_SRR3 = 100 - Extrude_Vout; //Shadow Update to active when counter match period
             dutyCount_SSR3 = 0;
         }
+
     }
+    else
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5); // turn off ssr out
 
 }

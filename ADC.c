@@ -84,9 +84,20 @@ void ADC_Cfg()
 }
 void ADC_READ(void)
 {
-
     fADC_TempPressureBrew = ui32ADCBuffer[temperaturePressurebrew] * K_Level;
     fADC_LevelSensor = ui32ADCBuffer[levelsensor] * K_Level;
+
+    /*
+     if (temp >= 52)
+     Extrude_Vout = 0;
+     else if (temp <= 50)
+     Extrude_Vout = 10;
+     else if(temp <= 40)
+     Extrude_Vout = 40;
+     */
+}
+void CNTL_Extrude()
+{
     VRT = fADC_TempPressureBrew;      //Conversion to voltage
     if (VRT > 0)
     {
@@ -101,16 +112,16 @@ void ADC_READ(void)
     case 0:
         if (temp < 35)
         {
-            Extrude_Vout = 60;
+            Extrude_Vout = 30;
             range = 0;
         }
         else
             range = 1;
         break;
     case 1:
-        if (32 < temp && temp< 45)
+        if (32 < temp && temp < 45)
         {
-            Extrude_Vout = 40;
+            Extrude_Vout = 15;
             range = 1;
         }
         else
@@ -122,14 +133,14 @@ void ADC_READ(void)
         }
         break;
     case 2:
-        if (44 < temp && temp < 52)
+        if (44 < temp && temp < 49)
         {
             range = 2;
-            Extrude_Vout = 15;
+            Extrude_Vout = 5;
         }
         else
         {
-            if (temp > 51)
+            if (temp > 48)
                 range = 3;
 
             else
@@ -137,23 +148,9 @@ void ADC_READ(void)
 
         }
         break;
-    case 3:
-        if (50 < temp && temp < 53)
-        {
-            Extrude_Vout = 10;
-            range = 3;
-        }
-        else
-        {
-            if (temp > 52)
-                range = 4;
-            else
-                range = 2;
 
-        }
-        break;
-    case 4:
-        if (temp > 52)
+    case 3:
+        if (temp > 48)
         {
             Extrude_Vout = 0;
             range = 4;
@@ -163,16 +160,4 @@ void ADC_READ(void)
         break;
 
     }
-
-    /*
-
-     if (temp >= 52)
-     Extrude_Vout = 0;
-     else if (temp <= 50)
-     Extrude_Vout = 10;
-     else if(temp <= 40)
-     Extrude_Vout = 40;
-     */
-
 }
-

@@ -95,7 +95,7 @@ uint16_t Blade, Ron;    //Used times of Blade and Ron
 Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Special_1,
         Mode_Special_2;
 Mode_Parameter_t *ModeSelected;
-float PulWeightRatio = 25;
+float PulWeightRatio;  // Weight calibration
 
 bool cancel_cmd, test_step = 0;    // cancel command
 // Temperature monitor/GUI-
@@ -187,6 +187,8 @@ void InitPumpingEvent(void);
 
 extern void SteamLevelControl_Run(void *PrPtr);
 extern void SteamLevelControl_Stop(void *PrPtr);
+
+void QEP_VelGrind_Cf(void);
 // -----------------------------------Peripheral Clock define -----------------------------------
 #define I2C0
 #define SPI0 #define SPI1
@@ -234,6 +236,8 @@ void HomeReturn_Process_Run(void *PrPtr);
 uint16_t speedtest = 2000;
 uint8_t flag_test;
 float m = 0.9;
+extern void InitFeedbackVel(void);
+uint32_t aa;
 void main(int argc, char **argv)
 {
     // Initialize Device/board include:
@@ -247,7 +251,9 @@ void main(int argc, char **argv)
 
 #ifndef SysCltEeprom
     SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
-    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_EEPROM0));
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_EEPROM0))
+        ;
+
 #endif
     EEPROMInitStastus = EEPROMInit();
     // Recovery Eeprom
@@ -338,7 +344,9 @@ void main(int argc, char **argv)
     I2C0_TCA9539_IterruptTrigger_Cnf(); // GPIO interrupt PB1
 
 // ------------------------------  Configure QEI ----------------------------------
+
     QEP_CoffeeMachine_cnf();
+    QEP_VelGrind_Cf();
     // InitPumpingEvent();
     Calibration = (float) 2 / 15.0;
 //=================================================================================
@@ -346,11 +354,14 @@ void main(int argc, char **argv)
 //=================================================================================
     LCD_Interface_Cnf(); // SPI & I/O configruation
     LCD_ST7567_Init();   // LCD initialize
+
     IntMasterEnable();
     LCD_Disp_Clr(0x00);
     // IntMasterDisable();
     // Initialize GUI interface
     SerialCommsInit();
+
+    VrTimer1[3] = 15;
     // Assign data stream to Gui variable display LCD - Display on Page 0 LCD
     dataSentList[cupsEspresso_1] = &Mode_Espresso_1.Cups;   //&SumOfCupInUsed;
     dataSentList[cupsEspresso_2] = &Mode_Espresso_2.Cups;
@@ -367,50 +378,51 @@ void main(int argc, char **argv)
     //"Set" variables
     //---------------------------------------
     // Assign GUI parameter  to desired  parameter setting addresses
-    Pr_Packet[0] = &Mode_Espresso_1.PreInfusion;
-    Pr_Packet[1] = &Mode_Espresso_1.Time;
-    Pr_Packet[2] = &Mode_Espresso_1.WeigtOfPowder;
-    Pr_Packet[3] = &Mode_Espresso_1.GrindingDuration;
+    Pr_Packet[0] = &Mode_Espresso_1.PreInfusion; //
+    Pr_Packet[1] = &Mode_Espresso_1.Time;        //
+    Pr_Packet[2] = &Mode_Espresso_1.WeigtOfPowder;  //
+    Pr_Packet[3] = (uint32_t*) &Mode_Espresso_1.GrindingDuration;   //
 
-    Pr_Packet[4] = &Mode_Espresso_1.AmountOfWaterPumping.stage_1;
+    //  Pr_Packet[4] = &Mode_Espresso_1.AmountOfWaterPumping.stage_1;
 
-    Pr_Packet[5] = (uint32_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[6] = &PitchOfpress;
+    Pr_Packet[4] = (uint32_t*) &HotWater_Temperature_Ref;
+    Pr_Packet[5] = &PitchOfpress;
 
     // Pr_Packet[3] = &Mode_Espresso_1.AmountOfWaterPumping.stage_2;
 
     Pr_Packet[8] = &Mode_Espresso_2.PreInfusion;
     Pr_Packet[9] = &Mode_Espresso_2.Time;
-    Pr_Packet[10] = &Mode_Espresso_1.WeigtOfPowder;
-    Pr_Packet[11] = &Mode_Espresso_2.GrindingDuration;
+    Pr_Packet[10] = &Mode_Espresso_2.WeigtOfPowder;
+    Pr_Packet[11] = (uint32_t*) &Mode_Espresso_2.GrindingDuration;
 
-    Pr_Packet[12] = &Mode_Espresso_2.AmountOfWaterPumping.stage_1;
+    //   Pr_Packet[12] = &Mode_Espresso_2.AmountOfWaterPumping.stage_1;
 
-    Pr_Packet[13] = (uint32_t*) &HotWater_Temperature_Ref;
+    Pr_Packet[12] = (uint32_t*) &HotWater_Temperature_Ref;
 
-    Pr_Packet[14] = &PitchOfpress;
+    Pr_Packet[13] = &PitchOfpress;
 
     Pr_Packet[16] = &Mode_Special_1.PreInfusion;
     Pr_Packet[17] = &Mode_Special_1.Time;
-    Pr_Packet[18] = &Mode_Espresso_1.WeigtOfPowder;
-    Pr_Packet[19] = &Mode_Special_1.GrindingDuration;
+    Pr_Packet[18] = &Mode_Special_1.WeigtOfPowder;
+    Pr_Packet[19] = (uint32_t*) &Mode_Special_1.GrindingDuration;
 
-    Pr_Packet[20] = &Mode_Special_1.AmountOfWaterPumping.stage_1;
+    //  Pr_Packet[20] = &Mode_Special_1.AmountOfWaterPumping.stage_1;
 
-    Pr_Packet[21] = (uint32_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[22] = &PitchOfpress;
+    Pr_Packet[20] = (uint32_t*) &HotWater_Temperature_Ref;
+    Pr_Packet[21] = &PitchOfpress;
 
     Pr_Packet[24] = &Mode_Special_2.PreInfusion;
     Pr_Packet[25] = &Mode_Special_2.Time;
-    Pr_Packet[26] = &Mode_Espresso_1.WeigtOfPowder;
-    Pr_Packet[27] = &Mode_Special_2.GrindingDuration;
+    Pr_Packet[26] = &Mode_Special_2.WeigtOfPowder;
+    Pr_Packet[27] = (uint32_t*) &Mode_Special_2.GrindingDuration;
 
-    Pr_Packet[28] = &Mode_Special_2.AmountOfWaterPumping.stage_1;
+    // Pr_Packet[28] = &Mode_Special_2.AmountOfWaterPumping.stage_1;
 
-    Pr_Packet[29] = (uint32_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[30] = &PitchOfpress;
+    Pr_Packet[28] = (uint32_t*) &HotWater_Temperature_Ref;
+    Pr_Packet[29] = &PitchOfpress;
     Pr_Packet[31] = (uint32_t*) &PulWeightRatio;
     // Assign direction motor of grind module
+
     Mode_Espresso_1.DirGrinding = Mode_Espresso_2.DirGrinding = false;
     Mode_Special_1.DirGrinding = Mode_Special_2.DirGrinding = true;
 
@@ -418,18 +430,20 @@ void main(int argc, char **argv)
     ParameterDefaultSetting();
 
     // Read EEPROM memory
-    //uint32_t tempt32DataRead[8];
+    uint32_t tempt32DataRead[32];
 
 #ifdef SaveEeprom
     uint8_t i = 0;
-    EEPROMRead(tempt32DataRead, AddDataEeprom, 8);
+    EEPROMRead(tempt32DataRead, AddDataEeprom, 32 * 4);
     // Attract 32 bit packet to 16 bit packet and initalize to system parameter;
-    uint16_t *ui16Ptr = (uint16_t*) tempt32DataRead;
-    for (i = 0; i < 16; i++)
+    uint32_t *ui32Ptr = (uint32_t*) tempt32DataRead;
+    for (i = 0; i < 32; i++)
     {
-        *Pr_Packet[i] = ui16Ptr[i];
+        *Pr_Packet[i] = ui32Ptr[i];
     }
+
 #endif
+
 //===================================ADC DMA Config================================================
     ADC_Cfg();
 
@@ -452,14 +466,16 @@ void main(int argc, char **argv)
     TCA9539Init(&TCA9539_IC1);
 
     // Enable Control temerature of steam and Hotwater tank
+    PWMSSR1Enable = 1;
     PWMSSR2Enable = 1;
     PWMSSR3Enable = 1;
-    Extrude_Vout = 5;
 
-    StartUpMachine();
+    InitFeedbackVel();
+    //StartUpMachine();
+
     while (1)
     {
-
+        aa = QEIPositionGet(QEI1_BASE);
         Ptr_Task(); // Swept periodic tasks
         Cmd_ReadMsg(); //Execute making coffee Machine
 
@@ -598,7 +614,8 @@ void C1(void)
             // TCA9539_IC1.TCA9539_Onput.all &= LED_BT5;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT5;
             id_Page0 = 7;
-            //test_step = 1;
+            test_step = 1;
+            step = 2;
             MakeCoffee();
             release_mode = 0;
 
@@ -610,7 +627,7 @@ void C1(void)
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT7;
             id_Page0 = 8;
             test_step = 1;
-            step = 0;
+            //step = 2;
             MakeCoffee();
             release_mode = 0;
         }
@@ -621,6 +638,7 @@ void C1(void)
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT4;
             id_Page0 = 5;
             // test_step = 1;
+            //step = 2;
             MakeCoffee();
             release_mode = 0;
         }
@@ -631,7 +649,7 @@ void C1(void)
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT6;
             id_Page0 = 6;
             test_step = 1;
-            step = 0;
+            step = 2;
             MakeCoffee();
             release_mode = 0;
         }

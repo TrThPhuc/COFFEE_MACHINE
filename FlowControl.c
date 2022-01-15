@@ -37,10 +37,6 @@ TCA9539Regs TCA9539_IC3;
 extern void Pumping_Process_Stop(void *PrPtr);
 void FlowMeterCal(void);
 uint32_t temp_count;
-uint32_t SpeedPumping, PWMDecrement = 10;
-uint32_t FreQ;
-float vel;
-
 void QEP_CoffeeMachine_cnf(void)
 {
     QEIDisable(QEI0_BASE);
@@ -79,10 +75,8 @@ void FlowMeterCal()
         temp_count = QEIPositionGet(QEI0_BASE);
         MilliLitresBuffer = (float) temp_count; // Calculate the vollume pumping
         //SpeedPumping = PWMPulseWidthGet(PWM0_BASE, PWM_OUT_2);
-        FreQ = QEIVelocityGet(QEI0_BASE);
-        vel = FreQ / 4.0 * 60;
-/*        if (MilliLitresBuffer >= SetVolume - 10)
-            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 4999);*/
+        //  FreQ = QEIVelocityGet(QEI0_BASE);
+        // vel = FreQ / 4.0 * 60;
         if ((MilliLitresBuffer >= SetVolume) && (FinishPumpEvent == false))
 
         {
@@ -97,7 +91,7 @@ void InitPumpingEvent(void)
 
 {
     MilliLitresBuffer = 0;
-    *Steam_CNTL.Out = 7999;
+    //*Steam_CNTL.Out = 7999;
     QEIPositionSet(QEI0_BASE, 0x0000);      // Initalize
     QEIIntClear(QEI0_BASE, QEI_INTTIMER);   // Clear any interrupt flag
     QEIIntEnable(QEI0_BASE, QEI_INTTIMER);  // Init interrupt timer out

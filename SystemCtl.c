@@ -37,6 +37,7 @@ void InitSysClt(void)
 
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_QEI0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_QEI1);
 
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
@@ -81,8 +82,6 @@ void TimerSysClt(void)
 
     TimerIntEnable(TIMER3_BASE, TIMER_TIMA_TIMEOUT);
     TimerIntEnable(TIMER5_BASE, TIMER_TIMA_TIMEOUT);
-
-
 
     // TimerInt of Timmingprocess will enable when initalizing task which need to timming
 

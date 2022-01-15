@@ -65,7 +65,8 @@ void PWMDRV_Coffee_machine_cnf(void)
 
 // Used for low frequency pwm generation
     GPIODirModeSet(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_DIR_MODE_OUT);
-    GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_4 | GPIO_PIN_5, GPIO_DIR_MODE_OUT);
+    GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_DIR_MODE_OUT);
+    GPIODirModeSet(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_DIR_MODE_OUT);
 
     GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_STRENGTH_8MA,
     GPIO_PIN_TYPE_STD);
@@ -86,10 +87,10 @@ void PWMDRV_Coffee_machine_cnf(void)
 
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, 8000);     // Freq = 10Khz
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0); // PB4 - Intialize Duty = 0%    //pumping moto
-    //   PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, 0); // PB5 - Intialize Duty = 0%    //SSR1
+
 
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);    // Disable output
-    //   PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);    // Disable output
+
 
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
 //-------------------------Generation 0 - f = 10Kh------------------------------------
@@ -97,7 +98,7 @@ void PWMDRV_Coffee_machine_cnf(void)
     PWMGenConfigure(PWM0_BASE, PWM_GEN_0,
     PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC);
 
-    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 10000);    // Freq = 10Khz
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 80000);    // Freq = 1Khz
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 0); // PB6 - Intialize Duty = 0%    Grinding motor
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0); // PB7 - Intialize Duty = 0%    Comress Motor
 
@@ -109,5 +110,4 @@ void PWMDRV_Coffee_machine_cnf(void)
     PWMOutputInvert(PWM0_BASE, PWM_OUT_0_BIT, true);
     PWMOutputInvert(PWM0_BASE, PWM_OUT_2_BIT, true);
 
-    //PWMOutputInvert(PWM0_BASE, PWM_OUT_3_BIT, true);
 }
