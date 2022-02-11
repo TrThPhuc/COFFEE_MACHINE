@@ -36,7 +36,6 @@ extern CNTL_2P2Z_Terminal_t Steam_CNTL;
 TCA9539Regs TCA9539_IC3;
 extern void Pumping_Process_Stop(void *PrPtr);
 void FlowMeterCal(void);
-uint32_t temp_count;
 void QEP_CoffeeMachine_cnf(void)
 {
     QEIDisable(QEI0_BASE);
@@ -57,7 +56,7 @@ void QEP_CoffeeMachine_cnf(void)
     HWREG(QEI0_BASE + QEI_O_CTL) = ((HWREG(QEI0_BASE + QEI_O_CTL)
             & ~(QEI_CTL_INVI)) | QEI_CTL_INVI);     // Invert Index Pulse
     QEIVelocityConfigure(QEI0_BASE, QEI_VELDIV_1, QEIVelTimer10m);
-    QEIFilterConfigure(QEI0_BASE, QEI_FILTCNT_8);
+    QEIFilterConfigure(QEI0_BASE, QEI_FILTCNT_17);
     QEIFilterEnable(QEI0_BASE);
     QEIVelocityEnable(QEI0_BASE);
     QEIIntRegister(QEI0_BASE, &FlowMeterCal);
@@ -72,11 +71,8 @@ void FlowMeterCal()
     {
         QEIIntClear(QEI0_BASE, QEI_INTTIMER);
 
-        temp_count = QEIPositionGet(QEI0_BASE);
-        MilliLitresBuffer = (float) temp_count; // Calculate the vollume pumping
-        //SpeedPumping = PWMPulseWidthGet(PWM0_BASE, PWM_OUT_2);
-        //  FreQ = QEIVelocityGet(QEI0_BASE);
-        // vel = FreQ / 4.0 * 60;
+        MilliLitresBuffer = (float) QEIPositionGet(QEI0_BASE);
+        ; // Calculate the vollume pumping
         if ((MilliLitresBuffer >= SetVolume) && (FinishPumpEvent == false))
 
         {
@@ -90,10 +86,10 @@ void FlowMeterCal()
 void InitPumpingEvent(void)
 
 {
+    QEIPositionSet(QEI0_BASE, 0x0000);        // Initalize
     MilliLitresBuffer = 0;
-    //*Steam_CNTL.Out = 7999;
-    QEIPositionSet(QEI0_BASE, 0x0000);      // Initalize
-    QEIIntClear(QEI0_BASE, QEI_INTTIMER);   // Clear any interrupt flag
+    uint32_t status = QEIIntStatus(QEI0_BASE, true);
+    QEIIntClear(QEI0_BASE, status);   // Clear any interrupt flag
     QEIIntEnable(QEI0_BASE, QEI_INTTIMER);  // Init interrupt timer out
 
 }

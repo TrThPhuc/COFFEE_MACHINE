@@ -160,10 +160,10 @@ char *LCD_String_Page2[10] = { "Espresso 1", "Espresso 2", "Special 1 ",
                                "Special 2 " };
 char *LCD_String_Page0[16] = { "Da san sang", "Dang ve sinh",
                                "Tha thuoc ve sinh", "Dang ve sinh", "thuoc",
-                               "Espresso", "Espresso", "Special", "Special" };
+                               "Espresso", "Espresso", "Special", "Special", "Dang khoi dong" };
 uint8_t id_Page0 = 0;
 
-char LCD_PosStr_page0[12] = { 24, 18, 3, 22, 45, 20, 8, 20, 10 };
+char LCD_PosStr_page0[12] = { 24, 18, 3, 22, 45, 20, 8, 20, 10,24 };
 bool Int_Format_parameter[6] = { 1, 1, 1, 0, 0, 1 };
 char *LCD_Format_Parameter[7] = { "%d", "%d", "%d", "%d", "%.1f", "%d" };
 union NumConvert_u LCD_Step[6] = { { .unintNum = 1 }, { .unintNum = 1 }, {
@@ -176,7 +176,7 @@ union NumConvert_u LCD_Step[6] = { { .unintNum = 1 }, { .unintNum = 1 }, {
 union NumConvert_u LCD_Max_Parameter[6] = { { .unintNum = 7 },
                                             { .unintNum = 30 }, { .unintNum =
                                                     200 },
-                                            { .floatNum = 15 },
+                                            { .floatNum = 18 },
                                             { .floatNum = 98 },
                                             { .unintNum = 19 } };
 union NumConvert_u LCD_Min_Parameter[6] = { { .unintNum = 4 },
@@ -684,10 +684,15 @@ void Page0_Display(void)
     else
         VrTimer1[3]++;
     sprintf(Str_Temp, "%.1f", tempGui);
-    Disp_Str_5x8_Image(7, 69, (uint8_t*) Str_Temp, LCD_IMAGE);
+    Disp_Str_5x8_Image(7, 72, (uint8_t*) Str_Temp, LCD_IMAGE);
 
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);
-    Disp_Str_5x8_Image(7, 30, (uint8_t*) Str_Temp, LCD_IMAGE);
+    Disp_Str_5x8_Image(7, 15, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]);
+    Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+
     if (calibVolumeFlag)
         Disp_Str_5x8_Image(6, 45, "Calib", LCD_IMAGE);
     switch (id_Page0)

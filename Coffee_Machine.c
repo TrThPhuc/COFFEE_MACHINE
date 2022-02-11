@@ -83,7 +83,7 @@ uint8_t coefSteam_change, coefHotWater_change;    ////////////////
 float Steam_Temperature_Ref, Steam_Vout;
 float HotWater_Temperature_Ref, HotWater_Vout;
 float Extrude_Vout;
-float Gui_TempSteam, Gui_HotWaterSteam, Gui_CoffeExtractionTime;
+float Gui_TempSteam, Gui_HotWaterSteam, Gui_CoffeExtractionTime, CountSteam;
 CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
 uint32_t PitchOfpress;
 
@@ -99,9 +99,9 @@ float PulWeightRatio;  // Weight calibration
 
 bool cancel_cmd, test_step = 0;    // cancel command
 // Temperature monitor/GUI-
-        /*float Steam_Temp_Gui;
-         float HotWater_Temp_Gui;
-         float PressHeating_Temp_Gui;*/
+/*float Steam_Temp_Gui;
+ float HotWater_Temp_Gui;
+ float PressHeating_Temp_Gui;*/
 // ---------------------------------- LCD Interface -----------------------------------------
 // Reset LCD - PA6
 #define SET_RST     GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_6, GPIO_PIN_6)
@@ -162,7 +162,7 @@ ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
 extern void SSI1_IntHandler(void);
 void ADS1118_Cal(ADS1118_t *ADS); // Calculate temperature
-
+extern float temp;
 volatile uint8_t datacount = 0;
 uint32_t datas, fb_config;
 #define MEM_BUFFER_SIZE         2
@@ -201,7 +201,8 @@ void PWMDRV_Coffee_machine_cnf(void);
 void ADC_Cfg(void);
 void ADC_READ(void);
 extern float fADC_LevelSensor;
-extern volatile bool LevelControlTriger, InLevelPumping;
+extern volatile bool LevelControlTriger, InLevelPumping, Hyteresis;
+extern bool SteamReady;
 extern void SteamLevelControl_Run(void *PrPtr);
 extern void SteamLevelControl_Stop(void *PrPtr);
 extern _Bool PWMSSR1Enable, PWMSSR2Enable, PWMSSR3Enable;
@@ -237,7 +238,8 @@ uint16_t speedtest = 2000;
 uint8_t flag_test;
 float m = 0.9;
 extern void InitFeedbackVel(void);
-uint32_t aa;
+
+uint32_t sp = 2000, dd, ss = 0;
 void main(int argc, char **argv)
 {
     // Initialize Device/board include:
@@ -278,18 +280,14 @@ void main(int argc, char **argv)
     //Temperature Control terminal assign - Steam
     CNTL_2P2Z_DBUFF_t Default = { 0, 0, 0, 0, 0 };
     Steam_CNTL.DBUFF = Default;     // Internal buffer
-    //  Steam_CNTL.Ref = &Steam_Temperature_Ref; //Desired temperature(reference signal)
-    Steam_CNTL.Ref = &SetVolume;
-
-    //   Steam_CNTL.Fdbk = &Steam.Actual_temperature; // Acutal temperature(feedback signal)
-    Steam_CNTL.Fdbk = &MilliLitresBuffer; // Acutal temperature(feedback signal)
+    Steam_CNTL.Ref = &Steam_Temperature_Ref; //Desired temperature(reference signal)
+    Steam_CNTL.Fdbk = &Steam.Actual_temperature; // Acutal temperature(feedback signal)
     Steam_CNTL.Out = &Steam_Vout;   // Control output
     Dmax_Steam = Dmax_HotWater = 100;
     Pgain_Steam = 500;
     Igain_Steam = 100;
-    Dgain_Steam = 0;
-    CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam, 7999,
-                       -10, 0);
+    CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam,
+                       Dmax_Steam, -10, 0);
 
     Hot_Water.Code = ADSCON_CH1; // Assign code channel 0 ADS1118 temperature sensor
     Hot_Water.Actual_temperature = 0;
@@ -338,10 +336,12 @@ void main(int argc, char **argv)
     TCA9539_IC3.ReadCmdFlag = 1;
 
 // ---------------------------------------------------------------------------------
+#if(BOARD == 1)
     // Configure I2C interface for Communicate with TCA9539
     I2C0_TCA9539_Configuration();
     // Configure GPIO interrupt to respone intertupt signal of TCA9539
     I2C0_TCA9539_IterruptTrigger_Cnf(); // GPIO interrupt PB1
+#endif
 
 // ------------------------------  Configure QEI ----------------------------------
 
@@ -374,6 +374,8 @@ void main(int argc, char **argv)
 
     dataSentList[HotWaterTemp] = (uint16_t*) &Gui_HotWaterSteam;
     dataSentList[ExtractionTime] = (uint16_t*) &Gui_CoffeExtractionTime;
+
+    dataSentList[tempExtrude] = (uint16_t*) &MilliLitresBuffer;
 
     //"Set" variables
     //---------------------------------------
@@ -460,11 +462,11 @@ void main(int argc, char **argv)
     TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Temperature control
     TimerIntClear(TIMER5_BASE, TIMER_TIMA_TIMEOUT); // Timming Process
     IntMasterEnable();
-
-    TCA9539Init(&TCA9539_IC3);
+#if(BOARD == 1)
+   TCA9539Init(&TCA9539_IC3);
     TCA9539Init(&TCA9539_IC2);
     TCA9539Init(&TCA9539_IC1);
-
+#endif
     // Enable Control temerature of steam and Hotwater tank
     PWMSSR1Enable = 1;
     PWMSSR2Enable = 1;
@@ -475,7 +477,7 @@ void main(int argc, char **argv)
 
     while (1)
     {
-        aa = QEIPositionGet(QEI1_BASE);
+
         Ptr_Task(); // Swept periodic tasks
         Cmd_ReadMsg(); //Execute making coffee Machine
 
@@ -527,6 +529,7 @@ void A1(void)
 // Task 2ms - Read input from extend GPIO ic TC9539
 void A2(void)
 {
+#if(BOARD == 1)
 // When signal change TCA595 wil generate interrupt and  ISR will set ReadCmdFlag
     if (TCA9539_IC1.ReadCmdFlag && !I2CMasterBusBusy(I2C0_BASE))
         Cmd_WriteMsg((void (*)(void*)) TCA9539ReadInputReg,
@@ -551,7 +554,7 @@ void A2(void)
     if (TCA9539_IC3.updateOutputFlag && !I2CMasterBusBusy(I2C0_BASE))
         Cmd_WriteMsg((void (*)(void*)) TCA9539WriteOutput,
                      (void*) &TCA9539_IC3);
-
+#endif
     A_Group_Task = &A1;
 }
 // Task 5ms - Update output - Make coffee
@@ -583,7 +586,6 @@ void B1(void)
     }
 
 // Scan to output TCA
-
     if (InProcess)
         B_Group_Task = &MakeCoffeProcess;
 
@@ -605,9 +607,10 @@ void C1(void)
 
     static uint8_t release_mode = 1, release = 0;
     static uint32_t Vrtimer;
-    _Bool En = readyRun && ~InStartUp;
+    _Bool En = readyRun && !InStartUp; // && SteamReady;
     if ((InProcess == 0) && (release_mode == 1) && (En == 1))
     {
+        id_Page0 = 0;
         if ((TCA9539_IC1.TCA9539_Input.all & Special1_Bt) == 0)
         {
             ModeSelected = &Mode_Special_1;
@@ -654,6 +657,10 @@ void C1(void)
             release_mode = 0;
         }
     }
+    if (!En)
+    {
+        id_Page0 = 9;
+    }
 //------------------------------------------------------------------------------------------
     if ((InProcess == 1) && (release == 1) && (cancel_cmd == 0))
     {
@@ -670,7 +677,7 @@ void C1(void)
         release_mode = 1;
         if (InProcess == 0)
         {
-            id_Page0 = 0;
+
             TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT4 | LED_BT5 | LED_BT6
                     | LED_BT7);
         }
@@ -702,14 +709,32 @@ void C2(void)
     if (fADC_LevelSensor > (float) 2.2 && (InLevelPumping == 0))
     {
         LevelControlTriger = InLevelPumping = 1;
-        // Cmd_WriteMsg(SteamLevelControl_Run, NULL);
+        Cmd_WriteMsg(SteamLevelControl_Run, NULL);
+        Hyteresis = 1;
     }
     // Stop pumping water to steam tank
-    else if ((fADC_LevelSensor < (float) 1.5) && (InLevelPumping == 1))
+    else if ((fADC_LevelSensor < (float) 1.1) && (InLevelPumping == 1)
+            && Hyteresis)
     {
-
-        //Cmd_WriteMsg(SteamLevelControl_Stop, NULL);
+        Hyteresis = 0;
+        Cmd_WriteMsg(SteamLevelControl_Stop, NULL);
     }
+    if ((fADC_LevelSensor >= (float) 0.85) && (fADC_LevelSensor <= (float) 2.2))
+    {
+        if (Gui_TempSteam >= 110)
+        {
+            (CountSteam >= 1200) ? (SteamReady = 1) : CountSteam++;
+
+        }
+        else
+        {
+            CountSteam = 0;
+            SteamReady = 0;
+        }
+
+    }
+    else
+        SteamReady = 0;
 
     if (coefSteam_change)
     {
@@ -724,9 +749,14 @@ void C2(void)
         coefHotWater_change = 0;
     }
     if (Hot_Water.Actual_temperature >= (HotWater_Temperature_Ref - 4))
+    {
         HotWater_CNTL.Coef.a1 = m;
+    }
+
     else
+    {
         HotWater_CNTL.Coef.a1 = 1;
+    }
 
     C_Group_Task = &C1;
 }

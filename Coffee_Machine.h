@@ -35,6 +35,8 @@
 // System define
 //#define SysCltEeprom
 //#define SaveEeprom
+
+#define BOARD 1
 struct AmountofWater
 {
     uint32_t stage_1;   //  Low flow
@@ -69,6 +71,8 @@ enum GuiParamter
     SeriNumber,
     Model,
     ProductDate,
+    tempExtrude,
+    PulseCount,
 
 };
 

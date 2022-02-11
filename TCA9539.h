@@ -136,8 +136,8 @@ typedef struct
 #define InitalOutput_IC3 0x00
 
 #define InitalConfig_IC1 0x84FF
-#define InitalConfig_IC2 0xC9EF
-#define InitalConfig_IC3 0xF4EF
+#define InitalConfig_IC2 0x89EF
+#define InitalConfig_IC3 0xF4AF     //0xF4EF
 //#define LoopBackTest
 
 void TCA9539WriteConfig(TCA9539Regs *Regs);

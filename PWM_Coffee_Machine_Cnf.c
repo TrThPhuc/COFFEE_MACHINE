@@ -30,6 +30,8 @@
 //              |              M0PWM1 |-->  Motor cum ep
 //              |              M0PWM2 |-->  Motor bom nuoc
 //              |_____________________|
+
+extern void PulseStepCount(void);
 void PWMDRV_Coffee_machine_cnf(void)
 {
 
@@ -88,7 +90,6 @@ void PWMDRV_Coffee_machine_cnf(void)
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, 8000);     // Freq = 10Khz
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0); // PB4 - Intialize Duty = 0%    //pumping moto
 
-
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);    // Disable output
 
 
@@ -104,10 +105,13 @@ void PWMDRV_Coffee_machine_cnf(void)
 
     PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);    // Disable output
     PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, false);    // Disable output
-
     PWMGenEnable(PWM0_BASE, PWM_GEN_0);
-    PWMOutputInvert(PWM0_BASE, PWM_OUT_1_BIT, true);
+
+    PWMGenIntRegister(PWM0_BASE, PWM_GEN_0, PulseStepCount);
+
+    //------------------------------------------------------------
     PWMOutputInvert(PWM0_BASE, PWM_OUT_0_BIT, true);
+    PWMOutputInvert(PWM0_BASE, PWM_OUT_1_BIT, true);
     PWMOutputInvert(PWM0_BASE, PWM_OUT_2_BIT, true);
 
 }

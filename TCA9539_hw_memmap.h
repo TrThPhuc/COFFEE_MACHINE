@@ -39,13 +39,13 @@
 #define SpeedFeedBack_BLDC2     0x800
 #define Direction_BLDC2         0x1000
 #define Enable_BLDC2            0x2000
-#define Brake_BLDC2             0x4000
+#define Valve_5                 0x4000
 #define Alarm_BLDC_2            0x8000
 
 // TCA9539 IC 3
 #define Valve_1                 0x10 // Valve 1
 #define Alarm_BLDC_1            0x20
-#define Brake_BLDC1             0x40
+#define Valve_4                 0x40
 #define Enable_BLDC1            0x80
 
 #define Direction_BLDC1         0x100
