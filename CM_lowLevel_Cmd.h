@@ -14,7 +14,7 @@
 
 // Compress process
 uint32_t pos1 = 118, pos2 = 149;  // position for compress process
-uint32_t stepPos1 = 4500, stepPos2 = 5200, stepPos3 = 800;
+uint32_t stepPos1 = 4500, stepPos2 = 5000, stepPos3 = 800;
 //175 210
 // Pumping timming
 uint8_t t1 = 200, t2 = 10;     // for test pre-infusion
@@ -36,15 +36,20 @@ extern float Gui_CoffeExtractionTime;
 bool triggerCount_ExtractionTime;
 
 extern float vel;
-uint32_t sp1 = 3000;
+uint32_t sp1 = 2900;
 uint32_t sp2 = 3200;
 uint32_t sp3 = 3400;
+#define k1 0.35
+#define k2 0.5
+#define k3 1
 float infu = 2;
 uint32_t speedstep = 12000;
 uint32_t pp1, pp2, pp3, ppo;
 float ppi = 0;
 float buffervel[8], tempv, avgvel;
-#define k1 0.3
-#define k2 1
-#define k3 1
+
+#define scooter 1
+#define bldc 0
+#define Grindmotor scooter
+uint32_t GringPWMIncrement = 70, MaxSpeedGring = 8500;
 #endif /* CM_LOWLEVEL_CMD_H_ */

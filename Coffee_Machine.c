@@ -205,12 +205,14 @@ extern volatile bool LevelControlTriger, InLevelPumping, Hyteresis;
 extern bool SteamReady;
 extern void SteamLevelControl_Run(void *PrPtr);
 extern void SteamLevelControl_Stop(void *PrPtr);
+extern void WarmingPressMachine(void *P);
 extern _Bool PWMSSR1Enable, PWMSSR2Enable, PWMSSR3Enable;
 // -------------------------------------- Group Task --------------------------------------------
 void (*A_Group_Task)(void); // 2ms Task
 void (*B_Group_Task)(void); // 5ms Task
 void (*C_Group_Task)(void); // 100ms Task
 
+uint32_t Vr_C2Task;
 void A_Base(void);
 void B_Base(void);  // Monitor machine
 void C_Base(void);
@@ -229,7 +231,8 @@ extern void MakeCoffee(void);
 extern void StartUpMachine(void);
 extern void MakeCoffeProcess(void);
 extern void StartUpProcess(void);
-extern bool InProcess, InStartUp, calibVolumeFlag;
+extern void WarmingPressProcess(void);
+extern bool InProcess, InStartUp, InWarming, calibVolumeFlag;
 extern volatile uint8_t step;
 uint32_t duty = 100;
 
@@ -238,7 +241,7 @@ uint16_t speedtest = 2000;
 uint8_t flag_test;
 float m = 0.9;
 extern void InitFeedbackVel(void);
-
+_Bool En;
 uint32_t sp = 2000, dd, ss = 0;
 void main(int argc, char **argv)
 {
@@ -463,7 +466,7 @@ void main(int argc, char **argv)
     TimerIntClear(TIMER5_BASE, TIMER_TIMA_TIMEOUT); // Timming Process
     IntMasterEnable();
 #if(BOARD == 1)
-   TCA9539Init(&TCA9539_IC3);
+    TCA9539Init(&TCA9539_IC3);
     TCA9539Init(&TCA9539_IC2);
     TCA9539Init(&TCA9539_IC1);
 #endif
@@ -473,8 +476,12 @@ void main(int argc, char **argv)
     PWMSSR3Enable = 1;
 
     InitFeedbackVel();
-    //StartUpMachine();
-
+    //  StartUpMachine();
+    SysCtlPWMClockSet(SYSCTL_PWMDIV_16);
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 100000);
+    PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
+    //PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, speedgrind);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 5000);   //8500
     while (1)
     {
 
@@ -591,6 +598,8 @@ void B1(void)
 
     else if (InStartUp)
         B_Group_Task = &StartUpProcess;
+    else if (InWarming)
+        B_Group_Task = &WarmingPressProcess;
     else
         B_Group_Task = &B2;
 }
@@ -607,7 +616,7 @@ void C1(void)
 
     static uint8_t release_mode = 1, release = 0;
     static uint32_t Vrtimer;
-    _Bool En = readyRun && !InStartUp; // && SteamReady;
+    En = readyRun && !InStartUp; // && SteamReady;
     if ((InProcess == 0) && (release_mode == 1) && (En == 1))
     {
         id_Page0 = 0;
@@ -705,6 +714,11 @@ void C1(void)
 void C2(void)
 {
     ADC_READ();
+    if (En && !InWarming && !InProcess)
+        (Vr_C2Task >= 600) ?
+                (Cmd_WriteMsg(WarmingPressMachine, NULL), Vr_C2Task = 0) :
+                (Vr_C2Task++); //Cmd_WriteMsg(WarmingPressMachine, NULL)
+
 // Start pumping water to steam tank
     if (fADC_LevelSensor > (float) 2.2 && (InLevelPumping == 0))
     {

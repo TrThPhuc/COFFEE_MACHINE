@@ -49,7 +49,8 @@ volatile uint8_t msg_head = 0, msg_tail = 0;    // Ring buffer
 
 // ------------------------Machine process ------------------------------
 // Gobal flag process
-volatile bool InProcess, FinishProcess, InStartUp;
+volatile bool InProcess, FinishProcess, InStartUp, InWarming;
+uint8_t stepWarming;
 #define NumberOfStep  8     // Number of step
 volatile uint8_t step;      // Step count
 uint8_t step_status[NumberOfStep];
@@ -110,6 +111,7 @@ bool SteamReady;
 //---------------------------------------
 // Delay between process
 volatile bool delay_flag = 0;
+extern uint32_t Vr_C2Task;
 // ------------------------Share variable and function ------------------------------
 extern Mode_Parameter_t *ModeSelected;
 extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
@@ -155,6 +157,10 @@ void Grinding_Process_Run(void *PrPtr)
     if (InGrinding && GrindingTriger)
 
     {
+#if(Grindmotor == scooter)
+        SysCtlPWMClockSet(SYSCTL_PWMDIV_16);
+#endif
+
         Mode_Parameter_t *Mode = (Mode_Parameter_t*) PrPtr;
         GrindingTriger = 0;
         // Set direction motor
@@ -168,14 +174,19 @@ void Grinding_Process_Run(void *PrPtr)
         // Enable BLDC1 driver
         TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
                 & ~(Enable_BLDC1)) | Enable_BLDC1);
-        /*        TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
-         & ~(Valve_4));*/
+        TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
+                & ~(Valve_4));
         TCA9539_IC3.updateOutputFlag = 1;
         InitFeedbackVel();
         // Enable PWM
-        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 80000);   //1Khz
+
+        // PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 80000);   //1Khz
+
+        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 100000);
         PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, speedgrind);
+        //PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, speedgrind);
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 8500);   //8500
+
         // Calculate grinding time
         offsetTime = (Mode->GrindingDuration) / UnitTimer;
         VrTimer_Grinding = (uint32_t) (offsetTime);
@@ -193,8 +204,13 @@ void Grinding_Process_Stop(void *PrPtr)
         TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
                 & ~(Enable_BLDC1));
         TCA9539_IC3.updateOutputFlag = 1;
+#if(Grindmotor == bldc)
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 0);
         PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);
+
+#else if (Grindmotor == scooter)
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 5000);
+#endif
 
     }
 
@@ -203,6 +219,9 @@ void Compress_Process_Run(void *PrPtr)
 {
     if (InCompress && CompressTriger)
     {
+#if(Grindmotor == scooter)
+        SysCtlPWMClockSet(SYSCTL_PWMDIV_1);
+#endif
         CompressTriger = 0;
         // Set direction
         TCA9539_IC2.TCA9539_Onput.all = ((TCA9539_IC2.TCA9539_Onput.all
@@ -214,8 +233,8 @@ void Compress_Process_Run(void *PrPtr)
         {
         case 1:
 
-            TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
-                    & ~(Valve_4)) | Valve_4);
+            /*            TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
+             & ~(Valve_4)) | Valve_4);*/
             break;
         case 3:
             TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
@@ -250,16 +269,18 @@ void Compress_Process_Stop(void *PrPtr)
 }
 void Pumping_Process_Run(void *PrPtr)
 {
+
     if (InPumping && PumpingTriger)
     {
+#if(Grindmotor == scooter)
+        SysCtlPWMClockSet(SYSCTL_PWMDIV_1);
+#endif
         PumpingTriger = Step_Pump = 0;
         // InPumping = 1;
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
         // Configure  turn on valve 1, valve 2
         TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
                 & ~(Valve_1) | Valve_1));
-        TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
-                & ~(Valve_4));
         TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
                 & ~(Valve_2));
         TCA9539_IC3.updateOutputFlag = 1;
@@ -320,6 +341,7 @@ void Pumping_Process_Stop(void *PrPtr)
 }
 void SteamLevelControl_Run(void *PrPtr)
 {
+
     if (InLevelPumping && LevelControlTriger)
     {
         LevelControlTriger = 0;
@@ -345,6 +367,9 @@ void HomeReturn_Process_Run(void *PrPtr)
 {
     if (InHomeReturn && HomeReturnTriger)
     {
+#if(Grindmotor == scooter)
+        SysCtlPWMClockSet(SYSCTL_PWMDIV_1);
+#endif
         HomeReturnTriger = 0;
 
         // Set direction
@@ -400,24 +425,24 @@ void TimmingPorcess()
     TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
     if (InGrinding)
     {
-        /*        if (avgvel >= sp3)
-         {
-         VrTimer_Compensate += k3;
-         pp3++;
-         update = 1;
-         }
-         else if (avgvel < sp3 && avgvel >= sp2)
-         {
-         VrTimer_Compensate += k2;
-         pp2++;
-         update = 1;
-         }
-         else if (avgvel < sp2 && avgvel >= sp1)
-         {
-         VrTimer_Compensate += k1;
-         update = 1;
-         pp1++;
-         }*/
+        if (avgvel >= sp3)
+        {
+            VrTimer_Compensate += k3;
+            pp3++;
+            update = 1;
+        }
+        else if (avgvel >= sp2 && avgvel < sp3)
+        {
+            VrTimer_Compensate += k2;
+            pp2++;
+            update = 1;
+        }
+        else if (avgvel >= sp1 && avgvel < sp2) //avgvel >= sp1
+        {
+            VrTimer_Compensate += k1;
+            update = 1;
+            pp1++;
+        }
         if (VrTimer_Grinding != 0)
         {
 
@@ -554,14 +579,13 @@ void CheckingFinish_StepInRuning()
         case 2: // Gringding coffee
             if (InGrinding)
             {
-                /*
-                 speedTemp = PWMPulseWidthGet(PWM0_BASE, PWM_OUT_0);
-                 if ((speedTemp + GringPWMIncrement) <= MaxSpeedGring)
-                 {
-                 PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0,
-                 speedTemp + GringPWMIncrement);
-                 }
-                 */
+
+                speedTemp = PWMPulseWidthGet(PWM0_BASE, PWM_OUT_0);
+                if ((speedTemp + GringPWMIncrement) <= MaxSpeedGring)
+                {
+                    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0,
+                                     speedTemp + GringPWMIncrement);
+                }
 
                 if (VrTimer_Grinding == 0)
                 {
@@ -583,7 +607,6 @@ void CheckingFinish_StepInRuning()
         case 6:
             if ((VrTimer_Compress == 0) && InCompress)
             {
-                // Cmd_WriteMsg(&Compress_Process_Stop, Null);
                 step_status[step] = Finish;
 
             }
@@ -608,7 +631,7 @@ void CheckingFinish_StepInRuning()
 
             if (FinishPumpEvent)
             {
-                // QEIIntDisable(QEI0_BASE, QEI_INTTIMER);
+
                 step_status[step] = Finish;
 
             }
@@ -629,11 +652,15 @@ void MakeCoffee()
         step_status[i] = Pending;
     }
     InHomeReturn = InGrinding = InCompress = InPumping = 0;
+    Vr_C2Task = 0;
     InProcess = 1;
     FinishProcess = 0;
     if (test_step == 0)
         step = 0;
     Gui_CoffeExtractionTime = 0;
+    InWarming = delay_flag = 0;
+    TCA9539_IC3.TCA9539_Onput.all =
+            (TCA9539_IC3.TCA9539_Onput.all & ~(Valve_4));
     TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
     TimerIntEnable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
 // B_Group_Task = &MakeCoffeProcess;
@@ -707,7 +734,7 @@ void MakeCoffeProcess(void)
                 {
                     speedstep = 12000;
                     Pos_Compress = 45;
-                    PosStep_Compress = stepPos3;
+                    PosStep_Compress = stepPos3; // stepPos3
                 }
 
                 Cmd_WriteMsg(&Compress_Process_Run, (void*) &Pos_Compress);
@@ -815,8 +842,9 @@ void MakeCoffeProcess(void)
             InProcess = step = 0;
 
         };
-        B_Group_Task = &CheckingFinish_StepInRuning;
+
     }
+    B_Group_Task = &CheckingFinish_StepInRuning;
 }
 void StartUpMachine()
 {
@@ -849,9 +877,12 @@ void StartUpProcess()
                     Cmd_WriteMsg(&HomeReturn_Process_Run, Null);
 
                 }
+                if (step == 2)
+                    TCA9539_IC3.TCA9539_Onput.all =
+                            (TCA9539_IC3.TCA9539_Onput.all & ~(Valve_4));
             }
 
-            if ((InHomeReturn) && (step_status[step] == Finish))
+            if ((InHomeReturn) && (HomePeding == 0))   // Read LimitSwitch))
             {
                 InHomeReturn = 0;
 
@@ -880,31 +911,48 @@ void StartUpProcess()
                 step++;
                 TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
                         & ~(Valve_4)) | Valve_4);
-                Delay_20ms(2000);
+                Delay_20ms(6000);
 
             }
             break;
-            /*
-             case 0:
-             TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
-             & ~(Valve_4)) | Valve_4);
-             Delay_20ms(2000);
-             step++;
-             break;
-             case 1:
-             if (!delay_flag)
-             {
-             InStartUp = step = 0;
-             TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
-             & ~(Valve_4));
-             TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
-             }
-             break;
-             */
 
         };
         B_Group_Task = &CheckingFinish_StepInRuning;
     }
+}
+void WarmingPressMachine(void *P)
+{
+
+    InWarming = 1;
+    stepWarming = 0;
+    TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
+    TimerIntEnable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
+}
+void WarmingPressProcess(void)
+{
+    static uint32_t stepWarming;
+    if (InWarming && SteamReady)
+    {
+        switch (stepWarming)
+        {
+        case 0:
+            TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
+                    & ~(Valve_4)) | Valve_4);
+            Delay_20ms(750);
+            stepWarming++;
+            break;
+        case 1:
+            if (!delay_flag)
+            {
+                InWarming = stepWarming = 0;
+                TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
+                        & ~(Valve_4));
+                TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
+            }
+
+        }
+    }
+    B_Group_Task = &CheckingFinish_StepInRuning;
 }
 void FeedbackVelGrind(void)
 {
@@ -932,19 +980,19 @@ void LookUpCompressTime(void)
     switch (PitchOfpress)
     {
     case 15:
-        stepPos2 = 5100;
+        stepPos2 = 5300;
         break;
     case 16:
-        stepPos2 = 5000;
+        stepPos2 = 5200;
         break;
     case 17:
-        stepPos2 = 4900;
+        stepPos2 = 5100;
         break;
     case 18:
-        stepPos2 = 4800;
+        stepPos2 = 5000;
         break;
     case 19:
-        stepPos2 = 4700;
+        stepPos2 = 4900;
         break;
     }
 }
@@ -965,7 +1013,7 @@ void QEP_VelGrind_Cf(void)
     GPIOPinConfigure(GPIO_PC6_PHB1);
     GPIOPinTypeQEI(GPIO_PORTC_BASE, GPIO_PIN_5 | GPIO_PIN_6);
 
-    QEIVelocityConfigure(QEI1_BASE, QEI_VELDIV_1, 8000000);
+    QEIVelocityConfigure(QEI1_BASE, QEI_VELDIV_1, 8000000); // 100ms
     QEIFilterConfigure(QEI1_BASE, QEI_FILTCNT_16);
     QEIFilterEnable(QEI1_BASE);
     QEIVelocityEnable(QEI1_BASE);
@@ -996,6 +1044,7 @@ void PulseStepCount()
     Cnt_StepMotor++;
 
 }
+
 void CleanProcess()
 {
 
