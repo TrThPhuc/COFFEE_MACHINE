@@ -153,17 +153,18 @@ _Bool boostFlag = 1, readyRun = 0;
 char *Str_Display;
 char Str_Temp[12];
 
-char *LCD_String_Page6[8] = { "Pre-infusion: ", "tong thoi gian: ", "Nuoc ra:",
+char *LCD_String_Page6[8] = { "Pre-infusion: ", "Nuoc ra: ", "T chiec suat:",
                               "Thoi gian xay: ", "Nhiet do: ", "Do day ep" }; //
 
 char *LCD_String_Page2[10] = { "Espresso 1", "Espresso 2", "Special 1 ",
                                "Special 2 " };
 char *LCD_String_Page0[16] = { "Da san sang", "Dang ve sinh",
                                "Tha thuoc ve sinh", "Dang ve sinh", "thuoc",
-                               "Espresso", "Espresso", "Special", "Special", "Dang khoi dong" };
+                               "Espresso", "Espresso", "Special", "Special",
+                               "Dang khoi dong" };
 uint8_t id_Page0 = 0;
 
-char LCD_PosStr_page0[12] = { 24, 18, 3, 22, 45, 20, 8, 20, 10,24 };
+char LCD_PosStr_page0[12] = { 24, 18, 3, 22, 45, 20, 8, 20, 10, 24 };
 bool Int_Format_parameter[6] = { 1, 1, 1, 0, 0, 1 };
 char *LCD_Format_Parameter[7] = { "%d", "%d", "%d", "%d", "%.1f", "%d" };
 union NumConvert_u LCD_Step[6] = { { .unintNum = 1 }, { .unintNum = 1 }, {
@@ -174,17 +175,18 @@ union NumConvert_u LCD_Step[6] = { { .unintNum = 1 }, { .unintNum = 1 }, {
 
 // preInfusion, time, Weightofpowder, grinding dur, Volume of water,
 union NumConvert_u LCD_Max_Parameter[6] = { { .unintNum = 7 },
-                                            { .unintNum = 30 }, { .unintNum =
-                                                    200 },
+                                            { .unintNum = 250 },
+                                            { .unintNum = 0 },
                                             { .floatNum = 18 },
-                                            { .floatNum = 98 },
+                                            { .floatNum = 102 },
                                             { .unintNum = 19 } };
+////////////////////////////////////////////////////////////////////////////////////
 union NumConvert_u LCD_Min_Parameter[6] = { { .unintNum = 4 },
-                                            { .unintNum = 25 },
                                             { .unintNum = 20 },
+                                            { .unintNum = 0 },
                                             { .floatNum = 5 },
                                             { .floatNum = 90 },
-                                            { .unintNum = 15 } };
+                                            { .unintNum = 11 } };
 float LCD_Max_Calib = 200.0f, LCD_Min_Calib = 20.0f;
 float LCD_Step_Calib = 0.1f;
 char str[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x7C, 0x38,
@@ -269,7 +271,7 @@ void ReturnNode()
 }
 void SerialCommsInit(void)
 {
-    // ButtonCmd_Init();
+
     LCD_TaskPointer = &GetButtonCmd;
     PagePointer = &pageWelcom_Display;
     MenuInitialize();
@@ -524,12 +526,12 @@ void PageDisplay()
                 if (i != idMask)
                 {
                     Pr_PacketCopyMask[4 + 8 * i] = 1;
-                    Pr_PacketCopyMask[5 + 8 * i] = 1;
+                    //Pr_PacketCopyMask[5 + 8 * i] = 1;
                 }
                 else
                 {
                     Pr_PacketCopyMask[4 + 8 * i] = 0;
-                    Pr_PacketCopyMask[5 + 8 * i] = 0;
+                    // Pr_PacketCopyMask[5 + 8 * i] = 0;
                 }
             }
             for (i = 0; i < NumberOfParameter; i++)
@@ -691,7 +693,6 @@ void Page0_Display(void)
 
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]);
     Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
-
 
     if (calibVolumeFlag)
         Disp_Str_5x8_Image(6, 45, "Calib", LCD_IMAGE);

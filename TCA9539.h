@@ -132,7 +132,7 @@ typedef struct
 #define Address_IC3  0x77   // A0 = 1  A1 = 1
 
 #define InitalOutput_IC1 0x00
-#define InitalOutput_IC2 0x00
+#define InitalOutput_IC2 0x2000
 #define InitalOutput_IC3 0x00
 
 #define InitalConfig_IC1 0x84FF

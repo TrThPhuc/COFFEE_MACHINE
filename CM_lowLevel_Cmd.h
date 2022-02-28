@@ -14,7 +14,9 @@
 
 // Compress process
 uint32_t pos1 = 118, pos2 = 149;  // position for compress process
-uint32_t stepPos1 = 4500, stepPos2 = 5000, stepPos3 = 800;
+uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 1000, stepPos4 = 80;
+
+
 //175 210
 // Pumping timming
 uint8_t t1 = 200, t2 = 10;     // for test pre-infusion
@@ -48,8 +50,6 @@ uint32_t pp1, pp2, pp3, ppo;
 float ppi = 0;
 float buffervel[8], tempv, avgvel;
 
-#define scooter 1
-#define bldc 0
-#define Grindmotor scooter
+
 uint32_t GringPWMIncrement = 70, MaxSpeedGring = 8500;
 #endif /* CM_LOWLEVEL_CMD_H_ */

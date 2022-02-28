@@ -17,8 +17,10 @@
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 #include "driverlib/sysctl.h"
+
 #include "inc/hw_memmap.h"
 #include "inc/hw_pwm.h"
+#include "Coffee_Machine.h"
 //                      SyncIn = 80Mhz
 //                         |
 //              ___________|___________
@@ -43,7 +45,10 @@ void PWMDRV_Coffee_machine_cnf(void)
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
 #endif
 // Configure Pin mux
+#if(Grind == pwm)
     GPIOPinConfigure(GPIO_PB6_M0PWM0);  // Grinding motor - Generation 0
+#endif
+
     GPIOPinConfigure(GPIO_PB7_M0PWM1);  // Comress Motor - Generation 0
 //------------------------------------------------------------------------------
     GPIOUnlockPin(GPIO_PORTB_BASE, GPIO_PIN_4); // Unclock pin
@@ -57,7 +62,14 @@ void PWMDRV_Coffee_machine_cnf(void)
 // GPIOPinConfigure(GPIO_PE5_M0PWM5);  // Out SSR3 Compress - Generation 2 (Not used PWM module)
 
 // Configure Pin type
+#if(Grind == pwm)
     GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6); // Grinding motor - Generation 0
+#else
+
+    GPIODirModeSet(GPIO_PORTB_BASE, GPIO_PIN_6, GPIO_DIR_MODE_OUT);
+    GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_6, GPIO_PIN_6);
+
+#endif
     GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_7); // Comress Motor   - Generation 0
     GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_6 | GPIO_PIN_7,
     GPIO_STRENGTH_8MA,
@@ -92,7 +104,6 @@ void PWMDRV_Coffee_machine_cnf(void)
 
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);    // Disable output
 
-
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
 //-------------------------Generation 0 - f = 10Kh------------------------------------
     // Grinding motor & Comress Motor
@@ -100,18 +111,30 @@ void PWMDRV_Coffee_machine_cnf(void)
     PWM_GEN_MODE_UP_DOWN | PWM_GEN_MODE_NO_SYNC);
 
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 80000);    // Freq = 1Khz
+#if(Grind == pwm)
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 0); // PB6 - Intialize Duty = 0%    Grinding motor
+#endif
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0); // PB7 - Intialize Duty = 0%    Comress Motor
-
+#if(Grind == pwm)
     PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);    // Disable output
+#endif
     PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, false);    // Disable output
     PWMGenEnable(PWM0_BASE, PWM_GEN_0);
 
     PWMGenIntRegister(PWM0_BASE, PWM_GEN_0, PulseStepCount);
 
     //------------------------------------------------------------
+
+#if(Grind == pwm)
     PWMOutputInvert(PWM0_BASE, PWM_OUT_0_BIT, true);
+#endif
     PWMOutputInvert(PWM0_BASE, PWM_OUT_1_BIT, true);
     PWMOutputInvert(PWM0_BASE, PWM_OUT_2_BIT, true);
 
+#if(Grindmotor == scooter)
+    SysCtlPWMClockSet(SYSCTL_PWMDIV_16);
+    PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
+#else
+    SysCtlPWMClockSet(SYSCTL_PWMDIV_1);
+#endif
 }

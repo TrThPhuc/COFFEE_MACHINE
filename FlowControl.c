@@ -47,8 +47,10 @@ void QEP_CoffeeMachine_cnf(void)
     GPIOPinConfigure(GPIO_PD7_PHB0);        // Dir
 // GPIO configure type
     GPIOPinTypeQEI(GPIO_PORTD_BASE, GPIO_PIN_6 | GPIO_PIN_7);
+
     GPIOPadConfigSet(GPIO_PORTD_BASE, GPIO_PIN_7, GPIO_STRENGTH_2MA, // Mode Pul/Dir
                      GPIO_PIN_TYPE_STD_WPD);
+//////////////////////////////////////////////////////////////////////////////
 // Confiure QEI
     QEIConfigure(QEI0_BASE,
     QEI_CONFIG_NO_RESET | QEI_CONFIG_CLOCK_DIR | QEI_CONFIG_NO_SWAP, // PD7 Dir, PD6 Clock

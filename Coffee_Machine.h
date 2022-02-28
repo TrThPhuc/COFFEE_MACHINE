@@ -37,6 +37,14 @@
 //#define SaveEeprom
 
 #define BOARD 1
+#define pwm 1
+#define Npwm 0
+#define scooter 1
+#define bldc 0
+#define Grindmotor bldc
+#define Grind Npwm
+#define PosPress 1
+
 struct AmountofWater
 {
     uint32_t stage_1;   //  Low flow
@@ -51,8 +59,9 @@ typedef struct Mode_Parameter
     float GrindingDuration;      // Grinding interval. Uint - 0.1s
     uint32_t WeigtOfPowder;         //  Weight of coffe powder - g
     bool DirGrinding;               // CW or CCW Grinding
-
+    uint32_t Pitch;
     uint16_t Cups;                  // Number of Cups
+    bool smallSize;
 
 } Mode_Parameter_t;
 void ParameterDefaultSetting();
