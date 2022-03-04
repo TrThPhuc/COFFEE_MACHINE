@@ -119,7 +119,7 @@ void PWMDRV_Coffee_machine_cnf(void)
     PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);    // Disable output
 #endif
     PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, false);    // Disable output
-    PWMGenEnable(PWM0_BASE, PWM_GEN_0);
+   // PWMGenEnable(PWM0_BASE, PWM_GEN_0);
 
     PWMGenIntRegister(PWM0_BASE, PWM_GEN_0, PulseStepCount);
 

@@ -62,6 +62,7 @@ extern volatile bool Write_ready;
 volatile uint16_t tx_tail, tx_head = 0;
 extern void LCD_Address_Set(uint8_t page, uint8_t column);
 extern void LCD_Write_Cmd(uint8_t cmd);
+////////////////////////////////////////////////////////////////////
 void uDMAIntHandler(void)
 {
     uint32_t ui32Mode;
@@ -91,6 +92,7 @@ void Init_SW_DMA(void)
     //  uDMAChannelEnable(UDMA_CHANNEL_SW);
     // uDMAChannelRequest(UDMA_CHANNEL_SW);
 }
+////////////////////////////////////////////////////////////////////
 void clearBuffer(void *ptr)
 {
     Write_ready = 0;
@@ -114,6 +116,7 @@ void Copy_bitExImage(void *ptr)
     uDMAChannelRequest(UDMA_CHANNEL_SW);
 
 }
+////////////////////////////////////////////////////////////////////
 void Init_LCDSPI_DMA(void)
 {
     SSIDMAEnable(SSI0_BASE, SSI_DMA_TX);
@@ -131,6 +134,7 @@ void Init_LCDSPI_DMA(void)
             UDMA_SIZE_8 | UDMA_SRC_INC_8 | UDMA_DST_INC_NONE | UDMA_ARB_4);
 
 }
+////////////////////////////////////////////////////////////////////
 void SSI0_DMA_IntHandler(void)
 {
     /*    uint32_t ui32Status;

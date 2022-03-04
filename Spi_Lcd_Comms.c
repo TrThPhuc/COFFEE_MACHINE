@@ -133,6 +133,7 @@ uint8_t Ack_PrAdj = 0;
 uint8_t Up_window_index = 3, Down_window_index = 0; // Windown display - 4 line
 extern bool calibVolumeFlag, calibVolumeStr;
 extern uint16_t *dataSentList[]; //  Kernel terminal connect to monitor variable
+extern bool En, idleMachine, InCleanning, InProcess;
 #define NumberOfParameter 32
 
 extern uint32_t *Pr_Packet[NumberOfParameter]; // Kernel terminal connect to parameter
@@ -149,7 +150,7 @@ float Pr_Gui_Packet[10];            // Array for Gui display parameter
 uint8_t save_pr, cpy_pr;
 
 // --------------------------User variable used for display -----------------------------------------
-_Bool boostFlag = 1, readyRun = 0;
+_Bool boostFlag = 1, HomePage = 0;
 char *Str_Display;
 char Str_Temp[12];
 
@@ -161,10 +162,12 @@ char *LCD_String_Page2[10] = { "Espresso 1", "Espresso 2", "Special 1 ",
 char *LCD_String_Page0[16] = { "Da san sang", "Dang ve sinh",
                                "Tha thuoc ve sinh", "Dang ve sinh", "thuoc",
                                "Espresso", "Espresso", "Special", "Special",
-                               "Dang khoi dong" };
-uint8_t id_Page0 = 0;
-
-char LCD_PosStr_page0[12] = { 24, 18, 3, 22, 45, 20, 8, 20, 10, 24 };
+                               "Dang khoi dong", "Ve sinh", "hoc dung ba",
+                               "Ma Loi:" };
+uint8_t id_Page0 = 0xFF, idModeRunning, idPage0Display[8];
+extern float ppi;
+char LCD_PosStr_page0[16] =
+        { 34, 32, 15, 32, 55, 16, 8, 20, 10, 24, 46, 35, 10 };
 bool Int_Format_parameter[6] = { 1, 1, 1, 0, 0, 1 };
 char *LCD_Format_Parameter[7] = { "%d", "%d", "%d", "%d", "%.1f", "%d" };
 union NumConvert_u LCD_Step[6] = { { .unintNum = 1 }, { .unintNum = 1 }, {
@@ -177,8 +180,8 @@ union NumConvert_u LCD_Step[6] = { { .unintNum = 1 }, { .unintNum = 1 }, {
 union NumConvert_u LCD_Max_Parameter[6] = { { .unintNum = 7 },
                                             { .unintNum = 250 },
                                             { .unintNum = 0 },
-                                            { .floatNum = 18 },
-                                            { .floatNum = 102 },
+                                            { .floatNum = 18 }, { .floatNum =
+                                                    102 },
                                             { .unintNum = 19 } };
 ////////////////////////////////////////////////////////////////////////////////////
 union NumConvert_u LCD_Min_Parameter[6] = { { .unintNum = 4 },
@@ -379,7 +382,7 @@ void ButtonSet_cmd()
             if (current_page == 0)
             {
                 current_page = 1;
-                readyRun = 0;
+                HomePage = 0;
             }
             else
             {
@@ -499,6 +502,7 @@ void ButtonUp_cmd()
 void PageDisplay()
 {
     uint16_t i;
+
     if (calibVolumeStr)
     {
         ObjSelect = (uint32_t*) &Pr_PacketCopy[31];
@@ -514,7 +518,6 @@ void PageDisplay()
     {
 
         Pr_Index = 0;
-        //   LCD_Disp_Clr(0x00);
         Down_window_index = 0;
         Up_window_index = 3;
         if (save_pr)
@@ -620,7 +623,8 @@ void PageDisplay()
     if (boostFlag != 0)
         //     goto ssw;
         (VrTimer1[2] > 250) ? (boostFlag = 0, page_change = 1) : VrTimer1[2]++;
-    if (VrTimer1[0] > 10) // refesh page
+//---------------------Refesh page--------------------------------------
+    if (VrTimer1[0] > 12)
     {
         VrTimer1[0] = 0;
 #ifdef uDma_SSI0
@@ -650,8 +654,12 @@ void PageDisplay()
 #endif
 #ifndef uDma_SSI0
         (*PagePointer)();
-        disp_bitmap(0, 0, (uint8_t*) LCD_IMAGE);
-        clearBuffer((void*) LCD_IMAGE);
+        if (uDMAChannelModeGet(UDMA_CHANNEL_SW) == UDMA_MODE_STOP)
+        {
+
+            disp_bitmap(0, 0, (uint8_t*) LCD_IMAGE);
+            clearBuffer((void*) LCD_IMAGE);
+        }
 
 #endif
     }
@@ -674,79 +682,141 @@ void Vertical_Display(void)
 }
 void Page0_Display(void)
 {
-    readyRun = 1;
-
-    // fflush(stdout);
-    static float tempGui;
-    if (VrTimer1[3] >= 15)
+    uint8_t i;
+    static bool upload;
+    if (upload == 0)
     {
-        VrTimer1[3] = 0;
-        tempGui = *(float*) dataSentList[HotWaterTemp];
+        if (!InProcess)
+            Copy_bitExImage((void*) bitmap);
+        upload = 1;
+
     }
-    else
-        VrTimer1[3]++;
-    sprintf(Str_Temp, "%.1f", tempGui);
+    uint32_t ui32Mode = uDMAChannelModeGet(UDMA_CHANNEL_SW);
+    if (ui32Mode == UDMA_MODE_STOP && upload == 1)
+    {
+        upload = 0;
+        HomePage = 1;
+        static float tempGui;
+        if (VrTimer1[3] >= 15)
+        {
+            VrTimer1[3] = 0;
+            tempGui = *(float*) dataSentList[HotWaterTemp];
+        }
+        else
+            VrTimer1[3]++;
+#ifdef debuglcd
+
+    sprintf(Str_Temp, "%.1f", tempGui);     // hot water temperature
     Disp_Str_5x8_Image(7, 72, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);
+    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);  // extraction time
     Disp_Str_5x8_Image(7, 15, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]);
+    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]); // pulse volumeter
     Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
+#endif
+        if (calibVolumeFlag)
+            Disp_Str_5x8_Image(6, 45, "Calib", LCD_IMAGE);
+// Copy_bitExImage((void*) bitmap);
+        for (i = 0; i < 4; i++)
+        {
+            id_Page0 = idPage0Display[i];
+            switch (id_Page0)
+            {
+            case 3: // Dang ve sinh thuoc (2 id)
+            case 10: // ve sinh hoc ba (2 id)
+                Str_Display = LCD_String_Page0[id_Page0];
+                Disp_Str_5x8_Image(6, LCD_PosStr_page0[id_Page0],
+                                   (uint8_t*) Str_Display, LCD_IMAGE);
+                Str_Display = LCD_String_Page0[id_Page0 + 1];
+                Disp_Str_5x8_Image(7, LCD_PosStr_page0[id_Page0 + 1],
+                                   (uint8_t*) Str_Display, LCD_IMAGE);
+                break;
 
-    if (calibVolumeFlag)
-        Disp_Str_5x8_Image(6, 45, "Calib", LCD_IMAGE);
-    switch (id_Page0)
-    {
-    case 3:
-        Str_Display = LCD_String_Page0[id_Page0];
-        Disp_Str_8x16_Image(3, LCD_PosStr_page0[id_Page0],
-                            (uint8_t*) Str_Display);
-        Str_Display = LCD_String_Page0[id_Page0 + 1];
-        Disp_Str_8x16_Image(5, LCD_PosStr_page0[id_Page0 + 1],
-                            (uint8_t*) Str_Display);
-        break;
-    case 5:
-        Disp_20x20_Image(4, 82, (uint8_t*) bitmapCoffeeE1,
-                         (uint8_t*) LCD_IMAGE);
-        goto skip;
-    case 6:
-        Disp_20x20_Image(4, 70, (uint8_t*) bitmapCoffeeE1,
-                         (uint8_t*) LCD_IMAGE);
-        Disp_20x20_Image(4, 95, (uint8_t*) bitmapCoffeeE1,
-                         (uint8_t*) LCD_IMAGE);
-        goto skip;
-    case 7:
-        Disp_20x20_Image(4, 90, (uint8_t*) bitmapCoffeeE2,
-                         (uint8_t*) LCD_IMAGE);
-        goto skip;
-    case 8:
-        Disp_20x20_Image(4, 78, (uint8_t*) bitmapCoffeeE2,
-                         (uint8_t*) LCD_IMAGE);
+                // Display image make cofffee process
+            case 5:
+                Disp_20x20_Image(4, 82, (uint8_t*) bitmapCoffeeE1,
+                                 (uint8_t*) LCD_IMAGE);
+                goto skip;
+            case 6:
+                Disp_20x20_Image(4, 78, (uint8_t*) bitmapCoffeeE1,
+                                 (uint8_t*) LCD_IMAGE);
+                Disp_20x20_Image(4, 103, (uint8_t*) bitmapCoffeeE1,
+                                 (uint8_t*) LCD_IMAGE);
+                goto skip;
+            case 7:
+                Disp_20x20_Image(4, 90, (uint8_t*) bitmapCoffeeE2,
+                                 (uint8_t*) LCD_IMAGE);
+                goto skip;
+            case 8:
+                Disp_20x20_Image(4, 78, (uint8_t*) bitmapCoffeeE2,
+                                 (uint8_t*) LCD_IMAGE);
 
-        Disp_20x20_Image(4, 103, (uint8_t*) bitmapCoffeeE2,
-                         (uint8_t*) LCD_IMAGE);
+                Disp_20x20_Image(4, 103, (uint8_t*) bitmapCoffeeE2,
+                                 (uint8_t*) LCD_IMAGE);
+                goto skip;
 
-        skip: default:
-        Str_Display = LCD_String_Page0[id_Page0];
-        Disp_Str_8x16_Image(4, LCD_PosStr_page0[id_Page0],
-                            (uint8_t*) Str_Display);
+            case 0:
+                Str_Display = LCD_String_Page0[id_Page0];
+                Disp_Str_5x8_Image(6, LCD_PosStr_page0[id_Page0],
+                                   (uint8_t*) Str_Display, LCD_IMAGE);
+                break;
+            case 255:
+                break;
+                skip: Str_Display = LCD_String_Page0[id_Page0];
+                Disp_Str_8x16_Image(4, LCD_PosStr_page0[id_Page0],
+                                    (uint8_t*) Str_Display);
+                sprintf(Str_Temp, "%.1f", ppi);         // hot water temperature
+                Disp_Str_5x8_Image(7, 82, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+                sprintf(Str_Temp, "%.0f",
+                        *(float*) dataSentList[ExtractionTime]); // extraction time
+                Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+                break;
+            case 1:
+                Str_Display = LCD_String_Page0[id_Page0];
+                Disp_Str_5x8_Image(7, LCD_PosStr_page0[id_Page0],
+                                   (uint8_t*) Str_Display, LCD_IMAGE);
+                break;
+            case 2:     // tha thuoc ve sinh
+                Str_Display = LCD_String_Page0[id_Page0];
+                Disp_Str_5x8_Image(7, LCD_PosStr_page0[id_Page0],
+                                   (uint8_t*) Str_Display, LCD_IMAGE);
+                break;
+                //case 4:
+            case 9:     // dang khoi dong
+                Str_Display = LCD_String_Page0[id_Page0];
+                Disp_Str_5x8_Image(6, LCD_PosStr_page0[id_Page0],
+                                   (uint8_t*) Str_Display, LCD_IMAGE);
+                break;
+            case 12:    // ma loi
+                Str_Display = LCD_String_Page0[id_Page0];
+                Disp_Str_5x8_Image(8, LCD_PosStr_page0[id_Page0],
+                                   (uint8_t*) Str_Display, LCD_IMAGE);
+            }
+        }
+// Display number of cups
+
+        if (idPage0Display[3] == 0xFE)
+        {
+            sprintf(Str_Temp, "%d", *dataSentList[cupsEspresso_1]);
+            Disp_Str_5x8_Image(8, 9, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+            sprintf(Str_Temp, "%d", *dataSentList[cupsEspresso_2]);
+            Disp_Str_5x8_Image(8, 39, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+            sprintf(Str_Temp, "%d", *dataSentList[cupsSpecial_1]);
+            Disp_Str_5x8_Image(8, 69, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+            sprintf(Str_Temp, "%d", *dataSentList[cupsSpecial_2]);
+            Disp_Str_5x8_Image(8, 99, (uint8_t*) Str_Temp,
+                               (uint8_t*) LCD_IMAGE);
+
+            Vertical_Display();
+
+        }
     }
-
-    sprintf(Str_Temp, "%d", *dataSentList[cupsEspresso_1]);
-    Disp_Str_5x8_Image(8, 9, (uint8_t*) Str_Temp, LCD_IMAGE);
-
-    sprintf(Str_Temp, "%d", *dataSentList[cupsEspresso_2]);
-    Disp_Str_5x8_Image(8, 39, (uint8_t*) Str_Temp, LCD_IMAGE);
-
-    sprintf(Str_Temp, "%d", *dataSentList[cupsSpecial_1]);
-    Disp_Str_5x8_Image(8, 69, (uint8_t*) Str_Temp, LCD_IMAGE);
-
-    sprintf(Str_Temp, "%d", *dataSentList[cupsSpecial_2]);
-    Disp_Str_5x8_Image(8, 99, (uint8_t*) Str_Temp, (uint8_t*) LCD_IMAGE);
-
-    Vertical_Display();
-
 }
 void Page1_Display(void)
 {
@@ -909,10 +979,19 @@ void Page7_Display()
 void pageWelcom_Display()
 {
 
-    Str_Display = "XIN CHAO";
-    Disp_Str_5x8_Image(7, 45, (uint8_t*) Str_Display, bitmap);
-    Copy_bitExImage((void*) bitmap);
-
+    static bool i = 0;
+    if (i == 0)
+    {
+        Copy_bitExImage((void*) bitmap);
+        i = 1;
+    }
+    uint32_t ui32Mode = uDMAChannelModeGet(UDMA_CHANNEL_SW);
+    if (ui32Mode == UDMA_MODE_STOP && i == 1)
+    {
+        i = 0;
+        Str_Display = "XIN CHAO";
+        Disp_Str_5x8_Image(7, 45, (uint8_t*) Str_Display, LCD_IMAGE);
+    }
 }
 
 void Page_Cursor_Display(uint8_t page, uint8_t pos)

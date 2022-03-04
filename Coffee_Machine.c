@@ -150,13 +150,15 @@ extern const unsigned char ascii_table_8x16[95][16];
 extern void WriteImageToDriverLCD(void *bufferPtr);
 uint8_t *LCD_IMAGE_Send, *LCD_IMAGE_Write;
 volatile bool Write_ready = 1;
-extern _Bool readyRun;
-extern uint8_t id_Page0;
+extern _Bool HomePage;
+extern uint8_t id_Page0, idModeRunning, idPage0Display[8];
 //////////////////////////////////////////////////
 extern void ReadTxFiFO(void);
 extern void WriteTxFiFO(uint8_t c);
 extern volatile uint8_t pagelcd;
 uint16_t counttest, countcup = 1102; // just used for test
+void InsertToIdMsg(uint8_t);
+void DeleteToIdMsg(uint8_t);
 // ---------------------------- ADS1118 Temperature Sensor ------------------------------------
 ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
@@ -211,11 +213,13 @@ extern _Bool PWMSSR1Enable, PWMSSR2Enable, PWMSSR3Enable;
 void (*A_Group_Task)(void); // 2ms Task
 void (*B_Group_Task)(void); // 5ms Task
 void (*C_Group_Task)(void); // 100ms Task
+void (*D_Group_Task)(void); // 500ns Task
 
 uint32_t Vr_C2Task;
 void A_Base(void);
 void B_Base(void);  // Monitor machine
 void C_Base(void);
+void D_Base(void);
 
 void A1(void);
 void A2(void);
@@ -226,13 +230,22 @@ void B2(void);
 void C1(void);
 void C2(void);
 
+void D1(void);
+
 uint16_t parameter[10] = { };
 extern void MakeCoffee(void);
+
 extern void StartUpMachine(void);
 extern void MakeCoffeProcess(void);
 extern void StartUpProcess(void);
 extern void WarmingPressProcess(void);
-extern bool InProcess, InStartUp, InWarming, calibVolumeFlag;
+extern void CleanningMachine(void);
+extern void CleanProcess(void);
+extern bool clModeRinse;
+extern bool InProcess, InCleanning, InStartUp, InWarming, calibVolumeFlag;
+bool idleMachine, fullOfGroundsDrawer, Suf_HotWater, FinishStartUp,
+        HeatingPress, Error, Id_Msg_flag;
+uint8_t countGrounds;
 bool InprocessStorage;
 extern volatile uint8_t step;
 uint32_t duty = 100;
@@ -242,7 +255,8 @@ uint16_t speedtest = 2000;
 uint8_t flag_test;
 float m = 0.9;
 extern void InitFeedbackVel(void);
-_Bool En;
+volatile _Bool En, EnMakeCoffee;
+volatile bool firstCup = true;
 uint32_t sp = 2000, dd, ss = 0;
 void main(int argc, char **argv)
 {
@@ -274,6 +288,7 @@ void main(int argc, char **argv)
     A_Group_Task = &A1;
     B_Group_Task = &B1;
     C_Group_Task = &C1;
+    D_Group_Task = &D1;
     clockrate = SysCtlClockGet();
 
 // ---------------------------------- USER ----------------------------------------
@@ -442,11 +457,12 @@ void main(int argc, char **argv)
     uint32_t *ui32Ptr = (uint32_t*) tempt32DataRead;
     for (i = 0; i < 32; i++)
     {
-       *Pr_Packet[i] = ui32Ptr[i];
+        *Pr_Packet[i] = ui32Ptr[i];
     }
 
 #endif
-
+    for (i = 0; i < 8; i++)
+        idPage0Display[i] = 0xFF;
 //===================================ADC DMA Config================================================
     ADC_Cfg();
 
@@ -457,6 +473,7 @@ void main(int argc, char **argv)
     TimerEnable(TIMER3_BASE, TIMER_A);
     TimerEnable(TIMER4_BASE, TIMER_A);
     TimerEnable(TIMER5_BASE, TIMER_A);
+    TimerEnable(WTIMER0_BASE, TIMER_BOTH);
 
 //Clear interrupt Flag & enable interrupt (CPU level)
     TimerIntClear(TIMER3_BASE, TIMER_TIMA_TIMEOUT); // Temperature control
@@ -474,10 +491,12 @@ void main(int argc, char **argv)
     PWMSSR3Enable = 1;
 
     InitFeedbackVel();
-    //  StartUpMachine();
-    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 100000);
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 5000);
+    StartUpMachine();
+    //  PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 100000);
+//    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 5000);
     QEP_VelGrind_Cf();
+    Error = 0;
+    FinishStartUp = 1;
     while (1)
     {
 
@@ -517,6 +536,18 @@ void C_Base(void)
 
         TimerIntClear(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
         C_Group_Task();
+    }
+    Ptr_Task = &D_Base;
+}
+
+void D_Base(void)
+{
+
+    if (TimerIntStatus(WTIMER0_BASE, false) == TIMER_TIMA_TIMEOUT)
+    {
+
+        TimerIntClear(WTIMER0_BASE, TIMER_TIMA_TIMEOUT);
+        D_Group_Task();
     }
     Ptr_Task = &A_Base;
 }
@@ -591,7 +622,8 @@ void B1(void)
 // Scan to output TCA
     if (InProcess)
         B_Group_Task = &MakeCoffeProcess;
-
+    else if (InCleanning)
+        B_Group_Task = &CleanProcess;
     else if (InStartUp)
         B_Group_Task = &StartUpProcess;
     else if (InWarming)
@@ -611,6 +643,11 @@ void B2(void)
         PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 100000);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 5000);   //8500
     }
+#else
+    if ((TCA9539_IC2.TCA9539_Input.all & (Enable_BLDC2 | Enable_BLDC1)) == 0)
+        PWMGenEnable(PWM0_BASE, PWM_GEN_0);
+    else
+        PWMGenDisable(PWM0_BASE, PWM_GEN_0);
 #endif
 
     B_Group_Task = &B1;
@@ -618,21 +655,19 @@ void B2(void)
 // Task 50ms - Button GUI
 void C1(void)
 {
-// ----------------------------------------Button GUI------------------------------//
-// Select mode and make coffe
 
-    static uint8_t release_mode = 1, release = 0;
+    static uint8_t release_mode = 1, release = 0, release_CleanB = 1;
     static uint32_t Vrtimer;
-    En = readyRun && !InStartUp; // && SteamReady;
-    if ((InProcess == 0) && (release_mode == 1) && (En == 1))
+// ---------------------------------------- Button cofffee maker & GUI ------------------------------//
+// Select mode and make coffe
+    if ((release_mode == 1) && (EnMakeCoffee == 1))
     {
-        id_Page0 = 0;
         if ((TCA9539_IC1.TCA9539_Input.all & Special1_Bt) == 0)
         {
             ModeSelected = &Mode_Special_1;
             // TCA9539_IC1.TCA9539_Onput.all &= LED_BT5;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT5;
-            id_Page0 = 7;
+            idModeRunning = 7;
             test_step = 1;
             step = 2;
             MakeCoffee();
@@ -644,7 +679,7 @@ void C1(void)
             ModeSelected = &Mode_Special_2;
             //   TCA9539_IC1.TCA9539_Onput.all &= LED_BT7;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT7;
-            id_Page0 = 8;
+            idModeRunning = 8;
             test_step = 1;
             step = 2;
             MakeCoffee();
@@ -655,7 +690,7 @@ void C1(void)
             ModeSelected = &Mode_Espresso_1;
             //     TCA9539_IC1.TCA9539_Onput.all &= LED_BT4;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT4;
-            id_Page0 = 5;
+            idModeRunning = 5;
             MakeCoffee();
             release_mode = 0;
         }
@@ -664,25 +699,47 @@ void C1(void)
             ModeSelected = &Mode_Espresso_2;
             //       TCA9539_IC1.TCA9539_Onput.all &= LED_BT6;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT6;
-            id_Page0 = 6;
+            idModeRunning = 6;
             MakeCoffee();
             release_mode = 0;
         }
     }
-    if (!En)
+// ---------------------------------------- Button Cleanning & GUI ------------------------------//
+    if ((release_CleanB == 1) && (EnMakeCoffee == 1))
     {
-        id_Page0 = 9;
+        // Cleanning complete machine
+        if ((TCA9539_IC1.TCA9539_Input.all & BT9) == 0)
+        {
+            TCA9539_IC1.TCA9539_Onput.all |= LED_BT9;
+            idModeRunning = 2;
+            CleanningMachine();
+            clModeRinse = 0;
+            release_CleanB = 0;
+
+        }
+        // Rinse
+        if ((TCA9539_IC1.TCA9539_Input.all & BT11) == 0)
+        {
+            idModeRunning = 1;
+            CleanningMachine();
+            clModeRinse = 1;
+            release_CleanB = 0;
+        }
+
     }
-//------------------------------------------------------------------------------------------
-    if ((InProcess == 1) && (release == 1) && (cancel_cmd == 0))
+
+//-------------------------------------------- Button cancel & GUI-------------------------------
+    if ((idleMachine == 0) && (release == 1) && (cancel_cmd == 0))
     {
         if ((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) == 0)
         {
+
             cancel_cmd = 1;
             release = 0;
-            TCA9539_IC1.TCA9539_Onput.all |= LED_BT8;
+            TCA9539_IC1.TCA9539_Onput.all |= LED_BT8;   // BT8
         }
     }
+
 //--------------------------------Release Button left Pannel-------------------------------------
     if ((TCA9539_IC1.TCA9539_Input.all & 0x78) == 0x78)
     {   // all button make coffe release
@@ -704,10 +761,18 @@ void C1(void)
     }
 
 //--------------------------------Release Button Right Pannel-------------------------------------
+    // Button cancel release
     if (((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) != 0)
-            && (InProcess == 0)) // Button cancel release
+            && (idleMachine == 0))
     {
         release = 1;
+        TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT8 | LED_BT9);
+    }
+    // Button clean release
+    if (((TCA9539_IC1.TCA9539_Input.all & (BT9 | BT11)) != 0x84)
+            && (InCleanning == 0)) // Button cancel release
+    {
+        release_CleanB = 1;
         TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT8 | LED_BT9);
     }
 
@@ -716,8 +781,9 @@ void C1(void)
 // Task 50ms - Control level
 void C2(void)
 {
+
     ADC_READ();
-    if (En && !InWarming && !InProcess)
+    if (En)
         (Vr_C2Task >= 300) ?
                 (Cmd_WriteMsg(WarmingPressMachine, NULL), Vr_C2Task = 0) :
                 (Vr_C2Task++); //Cmd_WriteMsg(WarmingPressMachine, NULL)
@@ -777,7 +843,44 @@ void C2(void)
 
     C_Group_Task = &C1;
 }
+// Monitor machine
+void D1(void)
+{
+
+    if (countGrounds >= 50)
+        fullOfGroundsDrawer = 1;
+    if (Gui_HotWaterSteam >= 20)
+        Suf_HotWater = 1;
+    idleMachine = !(InProcess || InStartUp || InCleanning);
+    FinishStartUp = Suf_HotWater && HeatingPress;
+    En = ((idleMachine) && FinishStartUp && (!fullOfGroundsDrawer) && (!Error));
+    EnMakeCoffee = En && HomePage;
+//================================ Message id to lcd =============================================
+    Id_Msg_flag = fullOfGroundsDrawer || !idleMachine || Error || En;
+
+
+    (!idleMachine && FinishStartUp) ? (idPage0Display[0] = idModeRunning) : (idPage0Display[0] = 0xFF);
+//---------------------------------------------------------------------------------
+    (fullOfGroundsDrawer && idleMachine) ?
+            (idPage0Display[1] = 10) : (idPage0Display[1] = 0xFF);
+//---------------------------------------------------------------------------------
+    (Error) ? (idPage0Display[2] = 12) : (idPage0Display[2] = 0xFF);
+//---------------------------------------------------------------------------------
+    if (En)
+    {
+        (firstCup) ? (idPage0Display[3] = 0) : (idPage0Display[3] = 0xFE);
+
+    }
+    else if(!FinishStartUp)
+        idPage0Display[3] = 9;
+    else
+        idPage0Display[3] = 0xFF;
+
+    D_Group_Task = &D1;
+}
+
 //======================================================================================================
+
 void Spi0_LCD_Interface_Cnf()
 {
 // Configurate pin mux for SSI(SPI) peripheral function
@@ -890,7 +993,7 @@ void Disp_Str_5x8(volatile uint8_t page, volatile uint8_t column, uint8_t *text)
     while (text[i] > 0x00)
     {
 
-        //
+//
         if ((text[i] >= 0x20) && (text[i] <= 0x7e))
         {
             j = text[i] - 0x20;

@@ -25,11 +25,11 @@
 #define LED_BT6                 0x1000
 #define LED_BT5                 0x2000
 #define LED_BT4                 0x4000
-#define Bt11                    0x8000
+#define BT11                    0x8000
 
 // TCA9539 IC 2
 #define LCD_back_Light          0x10
-#define Bt10                    0x20
+#define BT10                    0x20
 #define Brake_BLDC3             0x40
 #define SpeedFeedBack_BLDC3     0x80
 

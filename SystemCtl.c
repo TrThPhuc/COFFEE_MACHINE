@@ -19,6 +19,7 @@
 #define mSec20  1600000
 #define mSec50  4000000
 #define mSec125 10000000
+#define mSec500 16000000
 
 #define Configure_TCA9539_IC1   0xFF30
 #define Configure_TCA9539_IC2   0x89A0
@@ -45,6 +46,7 @@ void InitSysClt(void)
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER3);
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER4);
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER5);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_WTIMER0);
 
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
@@ -61,19 +63,22 @@ void InitSysClt(void)
 }
 void TimerSysClt(void)
 {
-    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
-    TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC);
-    TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
-    TimerConfigure(TIMER3_BASE, TIMER_CFG_PERIODIC);
-    TimerConfigure(TIMER4_BASE, TIMER_CFG_PERIODIC);
-    TimerConfigure(TIMER5_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerConfigure(TIMER3_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerConfigure(TIMER4_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerConfigure(TIMER5_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerConfigure(WTIMER0_BASE,
+    TIMER_CFG_SPLIT_PAIR | TIMER_CFG_A_PERIODIC);
 
-    TimerLoadSet(TIMER0_BASE, TIMER_A, mSec2);
-    TimerLoadSet(TIMER1_BASE, TIMER_A, mSec5);
-    TimerLoadSet(TIMER2_BASE, TIMER_A, mSec50);
-    TimerLoadSet(TIMER3_BASE, TIMER_A, mSec125);    // Temperature control
-    TimerLoadSet(TIMER4_BASE, TIMER_A, mSec20);    //20ms
-    TimerLoadSet(TIMER5_BASE, TIMER_A, mSec5);     // PWM low freqency generate
+    MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, mSec2);
+    MAP_TimerLoadSet(TIMER1_BASE, TIMER_A, mSec5);
+    MAP_TimerLoadSet(TIMER2_BASE, TIMER_A, mSec50);
+    MAP_TimerLoadSet(TIMER3_BASE, TIMER_A, mSec125);   // Temperature control
+    MAP_TimerLoadSet(TIMER4_BASE, TIMER_A, mSec20);    // Timming pocess
+    MAP_TimerLoadSet(TIMER5_BASE, TIMER_A, mSec5);  // PWM low freqency generate
+    MAP_TimerLoadSet(WTIMER0_BASE, TIMER_A, mSec500);
 
 // Interrrupt timer configure
     TimerIntRegister(TIMER3_BASE, TIMER_A, &Temperature_Control); // Temperature control

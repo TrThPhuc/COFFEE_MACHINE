@@ -85,4 +85,5 @@ enum GuiParamter
 
 };
 
+uint32_t ti;
 #endif /* COFFEE_MACHINE_H_ */
