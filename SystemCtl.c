@@ -32,6 +32,7 @@ void InitSysClt(void)
 // Configurate lock system run at 80 Mhz
     SysCtlClockSet(SYSCTL_SYSDIV_2_5 | SYSCTL_OSC_INT | SYSCTL_USE_PLL);
 // Pheripheral enable clock
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_WDOG0);
 
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_SSI0);
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_SSI1);

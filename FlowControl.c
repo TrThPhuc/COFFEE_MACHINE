@@ -21,6 +21,7 @@
 
 #include "PID.h"
 #include "TCA9539_hw_memmap.h"
+#include "Coffee_Machine.h"
 
 #ifndef Null
 #define Null 0
@@ -33,9 +34,14 @@ extern float SetVolume;
 extern volatile bool FinishPumpEvent;
 extern float Calibration;
 extern CNTL_2P2Z_Terminal_t Steam_CNTL;
+extern _Bool InPumping;
 TCA9539Regs TCA9539_IC3;
 extern void Pumping_Process_Stop(void *PrPtr);
+extern
 void FlowMeterCal(void);
+float v1, v2;
+_Bool ErNoPumpPulse;
+
 void QEP_CoffeeMachine_cnf(void)
 {
     QEIDisable(QEI0_BASE);
@@ -74,13 +80,25 @@ void FlowMeterCal()
         QEIIntClear(QEI0_BASE, QEI_INTTIMER);
 
         MilliLitresBuffer = (float) QEIPositionGet(QEI0_BASE);
-        ; // Calculate the vollume pumping
+        // Calculate the vollume pumping
         if ((MilliLitresBuffer >= SetVolume) && (FinishPumpEvent == false))
 
         {
             // Stop pumping direct not through swept function
             Pumping_Process_Stop(Null);
         }
+        if (!InPumping)
+            return;
+        if (eVrTimer[eVrPumpingPulse] >= 450)
+        {   // 2s
+            eVrTimer[eVrPumpingPulse] = 0;
+            v1 = MilliLitresBuffer;
+            ErNoPumpPulse = (v1 <= v2) ? true : false;
+            v2 = v1;
+
+        }
+        else if(PWMPulseWidthGet(PWM0_BASE, PWM_OUT_2) >= 2000)
+            eVrTimer[eVrPumpingPulse]++;
 
     }
 }

@@ -125,11 +125,12 @@ typedef struct
     union TCA9539_Configuration_Port_Regs TCA9539_Config;
     bool updateOutputFlag;
     bool ReadCmdFlag;
+    bool ErrorFlag;
 
 } TCA9539Regs;
-#define Address_IC1  0x74   // A0 = 0  A1 = 0
-#define Address_IC2  0x75   // A0 = 1  A1 = 0
-#define Address_IC3  0x77   // A0 = 1  A1 = 1
+#define Address_IC1     0x74  // A0 = 0  A1 = 0 0x74
+#define Address_IC2     0x75   // A0 = 1  A1 = 0 0x75
+#define Address_IC3     0x77  // A0 = 1  A1 = 1 0x77
 
 #define InitalOutput_IC1 0x00
 #define InitalOutput_IC2 0x2000

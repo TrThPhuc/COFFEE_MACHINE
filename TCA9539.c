@@ -75,7 +75,7 @@ unsigned char I2C_Write_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
 {
 
     // Wait for i2c bus idle, used for multi master
-    // Or single transfer to 1 slave
+    // Or may be omitted in a single master
     while (I2CMasterBusBusy(I2C0_BASE))
         ;
 
@@ -131,7 +131,8 @@ unsigned char I2C_Write_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
 unsigned char I2C_Read_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
                               unsigned char *data, unsigned char count)
 {
-
+    // Wait for i2c bus idle, used for multi master
+    // Or may be omitted in a single master
     while (I2CMasterBusBusy(I2C0_BASE))
         ;
     I2CMasterSlaveAddrSet(I2C0_BASE, Slave_Add, Write);     // write cmd
@@ -201,57 +202,62 @@ unsigned char I2C_Read_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
 
 void TCA9539Init(TCA9539Regs *Regs)
 {
-    I2C_Write_Buffer(Regs->_Id, TCA9539_CONFIG_PORT,
-                     (unsigned char*) &Regs->TCA9539_Config, 2);
-    I2C_Write_Buffer(Regs->_Id, TCA9539_OUTPUT_PORT,
-                     (unsigned char*) &Regs->TCA9539_Onput, 2);
-
-    /*     I2C_Write_Buffer(Address_IC3, TCA9539_POL_INVERSE_PORT,
-     (unsigned char*) &Regs->TCA9539_Config, 2);*/
-
-    // TCA9539ReadInputReg(Regs);
+    Regs->ErrorFlag = I2C_Write_Buffer(Regs->_Id, TCA9539_CONFIG_PORT,
+                                       (unsigned char*) &Regs->TCA9539_Config,
+                                       2);
+    Regs->ErrorFlag = I2C_Write_Buffer(Regs->_Id, TCA9539_OUTPUT_PORT,
+                                       (unsigned char*) &Regs->TCA9539_Onput,
+                                       2);
 }
 //------------------------------------------------------------------------------------//
 void TCA9539ReadInputReg(TCA9539Regs *Regs)
 {
 
     Regs->ReadCmdFlag = 0;
-    I2C_Read_Buffer(Regs->_Id, TCA9539_INPUT_PORT,
-                    (unsigned char*) &Regs->TCA9539_Input, 2);
+    Regs->ErrorFlag = I2C_Read_Buffer(Regs->_Id, TCA9539_INPUT_PORT,
+                                      (unsigned char*) &Regs->TCA9539_Input, 2);
 }
-void TCA9539ReadInputReg_BrustSlave(TCA9539Regs **RegsA)
-{
-    //BrustSlave_Write(&TCA9539_IC);
-    Rx_usedBrust = 1;
-    I2C_Read_Buffer(RegsA[Rx_slavecount]->_Id, TCA9539_INPUT_PORT,
-                    (unsigned char*) &RegsA[Rx_slavecount]->TCA9539_Input, 2);
-}
+/*
+ void TCA9539ReadInputReg_BrustSlave(TCA9539Regs **RegsA)
+ {
+ //BrustSlave_Write(&TCA9539_IC);
+ Rx_usedBrust = 1;
+ I2C_Read_Buffer(RegsA[Rx_slavecount]->_Id, TCA9539_INPUT_PORT,
+ (unsigned char*) &RegsA[Rx_slavecount]->TCA9539_Input, 2);
+ }
+ */
+
 //------------------------------------------------------------------------------------//
 void TCA9539WriteConfig(TCA9539Regs *Regs)
 {
-    I2C_Write_Buffer(Regs->_Id, TCA9539_CONFIG_PORT,
-                     (unsigned char*) &Regs->TCA9539_Config, 2);
+    Regs->ErrorFlag = I2C_Write_Buffer(Regs->_Id, TCA9539_CONFIG_PORT,
+                                       (unsigned char*) &Regs->TCA9539_Config,
+                                       2);
 }
 //------------------------------------------------------------------------------------//
 void TCA9539WriteOutput(TCA9539Regs *Regs)
 {
     Regs->updateOutputFlag = false;
-    I2C_Write_Buffer(Regs->_Id, TCA9539_OUTPUT_PORT,
-                     (unsigned char*) &Regs->TCA9539_Onput, 2);
+    Regs->ErrorFlag = I2C_Write_Buffer(Regs->_Id, TCA9539_OUTPUT_PORT,
+                                       (unsigned char*) &Regs->TCA9539_Onput,
+                                       2);
 
 }
-void TCA9539WriteOutput_BrustSlave(TCA9539Regs **RegsA)
-{
-    RegsA[Tx_slavecount]->updateOutputFlag = false;
-    Tx_usedBrust = 1;
-    I2C_Write_Buffer(RegsA[Tx_slavecount]->_Id, TCA9539_OUTPUT_PORT,
-                     (unsigned char*) &RegsA[Tx_slavecount]->TCA9539_Onput, 2);
-}
+/*
+ void TCA9539WriteOutput_BrustSlave(TCA9539Regs **RegsA)
+ {
+ RegsA[Tx_slavecount]->updateOutputFlag = false;
+ Tx_usedBrust = 1;
+ I2C_Write_Buffer(RegsA[Tx_slavecount]->_Id, TCA9539_OUTPUT_PORT,
+ (unsigned char*) &RegsA[Tx_slavecount]->TCA9539_Onput, 2);
+ }
+ */
 //------------------------------------------------------------------------------------//
 void TCA9539WritePolarity(TCA9539Regs *Regs)
 {
-    I2C_Write_Buffer(Regs->_Id, TCA9539_POL_INVERSE_PORT,
-                     (unsigned char*) &Regs->TCA9539_PolInv, 2);
+    Regs->ErrorFlag = I2C_Write_Buffer(Regs->_Id, TCA9539_POL_INVERSE_PORT,
+                                       (unsigned char*) &Regs->TCA9539_PolInv,
+                                       2);
 }
 void I2C0_TCA9539_Configuration(void)
 {
@@ -308,24 +314,6 @@ void I2C0_TCA9539_IterruptTrigger_Cnf()
 //-------------------------Interrupt method---------------------------------*/
 void I2C_Interrupt_Handler()
 {
-// slave for testing
-//----------- Slave interrupt-------------------//
-    /*    if (I2CSlaveIntStatus(I2C0_BASE, true))
-     {
-     I2CSlaveIntClear(I2C0_BASE);
-     uint8_t status = I2CSlaveStatus(I2C0_BASE) & 0x03;
-     switch (status)
-     {
-     case I2C_SLAVE_ACT_RREQ:
-
-     g_ui32DataRx = I2CSlaveDataGet(I2C0_BASE);
-     break;
-     case I2C_SLAVE_ACT_TREQ:
-
-     I2CSlaveDataPut(I2C0_BASE, 0xAB);
-     break;
-     };
-     }*/
 //--------------------------------- Master interrupt-----------------------------------//
     if (I2CMasterIntStatus(I2C0_BASE, true))
     {

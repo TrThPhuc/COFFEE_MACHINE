@@ -39,6 +39,9 @@ void TimerSysClt(void);
 void (*Ptr_Task)(void);     // Pointer task
 extern void Cmd_ReadMsg(void);
 extern void Cmd_WriteMsg(void (*pFun)(void*), void *pArg);
+void WatchdogInit(void);
+void WatchdogIntHandler(void);
+void SweptErrorMachine(void);
 // The error routine that is called if the driver library encounters an error.
 #ifdef DEBUG
 void
@@ -69,6 +72,7 @@ const char *Producer = "Davi Engineering";
 const char *SerialProduct = "xx";
 uint32_t clockrate; // System clock
 uint32_t EEPROMInitStastus;
+volatile _Bool feedWacthdog = true;
 // ---------------------------------- USER --------------------------------------------------
 // Temperature controll
 // PID coeficient translate to zeros and poles of heting process
@@ -143,7 +147,7 @@ extern uint8_t LCD_IMAGE[1024];
 uint16_t *dataSentList[16]; // Terminal connect to monitor variable
 uint32_t *Pr_Packet[32];    // Terminal connect to Parameter
 uint8_t coeff_change;   // Flag for change parameter in mode /////////
-int16_t VrTimer1[4];    // Virtual timer
+int16_t VrTimer1[8];    // Virtual timer
 extern const unsigned char ascii_table_5x8[95][5]; // Bit Map for ASCII table (ASCII_Font.c)
 extern const unsigned char ascii_table_8x16[95][16];
 ////////////Used for DMA mode///////////////////////
@@ -159,7 +163,7 @@ extern volatile uint8_t pagelcd;
 uint16_t counttest, countcup = 1102; // just used for test
 void InsertToIdMsg(uint8_t);
 void DeleteToIdMsg(uint8_t);
-// ---------------------------- ADS1118 Temperature Sensor ------------------------------------
+// ---------------------------- ADS1118 Temperature Sensor & Heating ------------------------------------
 ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
 extern void SSI1_IntHandler(void);
@@ -171,6 +175,8 @@ uint32_t datas, fb_config;
 extern uint16_t ui16TxBuf[];
 extern uint16_t ui16RxBuf[];
 uint16_t volatile Settingconfig;
+extern _Bool HeatingHotwater, HeatingSteam;
+extern _Bool ErHotWaterTimeOut, ErSteamTimeOut;
 // ---------------------------- TCA9539 IO Expander Module --------------------------------------
 TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
 TCA9539Regs *TCA9539_IC[3] = { &TCA9539_IC1, &TCA9539_IC2, &TCA9539_IC3 };
@@ -242,9 +248,11 @@ extern void WarmingPressProcess(void);
 extern void CleanningMachine(void);
 extern void CleanProcess(void);
 extern bool clModeRinse;
-extern bool InProcess, InCleanning, InStartUp, InWarming, calibVolumeFlag;
+extern bool InProcess, InCleanning, InStartUp, InWarming, calibWeightFlag;
+extern uint8_t calibWeightObj;
 bool idleMachine, fullOfGroundsDrawer, Suf_HotWater, FinishStartUp,
         HeatingPress, Error, Id_Msg_flag;
+
 uint8_t countGrounds;
 bool InprocessStorage;
 extern volatile uint8_t step;
@@ -290,6 +298,7 @@ void main(int argc, char **argv)
     C_Group_Task = &C1;
     D_Group_Task = &D1;
     clockrate = SysCtlClockGet();
+    WatchdogInit();
 
 // ---------------------------------- USER ----------------------------------------
 //=================================================================================
@@ -329,7 +338,7 @@ void main(int argc, char **argv)
 //  ADS1118 - Termperature Sensor Configuration - 2 channel
 //=================================================================================
     Spi1_ADS1118_Interface_Cnf();   // Configurate spi1
-    ADS_Config(0);  // Dummy config (Notused)
+
 //=================================================================================
 //  TCA9539 - I/O Expander Configuration - 2 channel
 //=================================================================================
@@ -442,11 +451,12 @@ void main(int argc, char **argv)
     // Assign direction motor of grind module
 
     Mode_Espresso_1.DirGrinding = Mode_Espresso_2.DirGrinding = false;
-    Mode_Special_1.DirGrinding = Mode_Special_2.DirGrinding = false; // true
+    Mode_Special_1.DirGrinding = false;
+    Mode_Special_2.DirGrinding = true; // true
 
 //============================= Configure machine Parameter ========================================
     ParameterDefaultSetting();
-
+    AssignErrorList();
     // Read EEPROM memory
     uint32_t tempt32DataRead[32];
 
@@ -492,14 +502,12 @@ void main(int argc, char **argv)
 
     InitFeedbackVel();
     StartUpMachine();
-    //  PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, 100000);
-//    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, 5000);
     QEP_VelGrind_Cf();
-    Error = 0;
+
     FinishStartUp = 1;
     while (1)
     {
-
+        feedWacthdog = true;    // Feed watchdog timer
         Ptr_Task(); // Swept periodic tasks
         Cmd_ReadMsg(); //Execute making coffee Machine
 
@@ -657,6 +665,7 @@ void C1(void)
 {
 
     static uint8_t release_mode = 1, release = 0, release_CleanB = 1;
+    static _Bool mode_str;
     static uint32_t Vrtimer;
 // ---------------------------------------- Button cofffee maker & GUI ------------------------------//
 // Select mode and make coffe
@@ -670,7 +679,8 @@ void C1(void)
             idModeRunning = 7;
             test_step = 1;
             step = 2;
-            MakeCoffee();
+            mode_str = true;
+            calibWeightObj  = 19;
             release_mode = 0;
 
         }
@@ -682,7 +692,8 @@ void C1(void)
             idModeRunning = 8;
             test_step = 1;
             step = 2;
-            MakeCoffee();
+            mode_str = true;
+            calibWeightObj  = 27;
             release_mode = 0;
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso1_Bt) == 0)
@@ -691,7 +702,8 @@ void C1(void)
             //     TCA9539_IC1.TCA9539_Onput.all &= LED_BT4;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT4;
             idModeRunning = 5;
-            MakeCoffee();
+            mode_str = true;
+            calibWeightObj  = 3;
             release_mode = 0;
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso2_Bt) == 0)
@@ -700,10 +712,17 @@ void C1(void)
             //       TCA9539_IC1.TCA9539_Onput.all &= LED_BT6;
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT6;
             idModeRunning = 6;
-            MakeCoffee();
+            calibWeightObj  = 11;
+            mode_str = true;
             release_mode = 0;
         }
     }
+    if (mode_str && (release_mode == 1))
+    {
+        mode_str = false;
+        MakeCoffee();
+    }
+
 // ---------------------------------------- Button Cleanning & GUI ------------------------------//
     if ((release_CleanB == 1) && (EnMakeCoffee == 1))
     {
@@ -754,9 +773,9 @@ void C1(void)
     }
     else
         Vrtimer++;
-    if ((Vrtimer > 25) && (calibVolumeFlag == 0) && (InProcess == 1))
+    if ((Vrtimer > 25) && (calibWeightFlag == 0) && En)
     {
-        calibVolumeFlag = 1;
+        calibWeightFlag = 1;
         Vrtimer = 0;
     }
 
@@ -789,24 +808,27 @@ void C2(void)
                 (Vr_C2Task++); //Cmd_WriteMsg(WarmingPressMachine, NULL)
 
 // Start pumping water to steam tank
-    if (fADC_LevelSensor > (float) 2.2 && (InLevelPumping == 0))
+    if (fADC_LevelSensor > (float) 2.2)
     {
-        LevelControlTriger = InLevelPumping = 1;
-        Cmd_WriteMsg(SteamLevelControl_Run, NULL);
+        if (InLevelPumping == 0)
+        {
+            LevelControlTriger = InLevelPumping = 1;
+            Cmd_WriteMsg(SteamLevelControl_Run, NULL);
+        }
         Hyteresis = 1;
     }
     // Stop pumping water to steam tank
-    else if ((fADC_LevelSensor < (float) 1.1) && (InLevelPumping == 1)
-            && Hyteresis)
+    else if (fADC_LevelSensor < (float) 1.1)
     {
+        if (InLevelPumping == 1)
+            Cmd_WriteMsg(SteamLevelControl_Stop, NULL);
         Hyteresis = 0;
-        Cmd_WriteMsg(SteamLevelControl_Stop, NULL);
     }
     if ((fADC_LevelSensor >= (float) 0.85) && (fADC_LevelSensor <= (float) 2.2))
     {
         if (Gui_TempSteam >= 110)
         {
-            (CountSteam >= 1200) ? (SteamReady = 1) : CountSteam++;
+            (CountSteam >= 900) ? (SteamReady = 1) : CountSteam++;
 
         }
         else
@@ -846,32 +868,84 @@ void C2(void)
 // Monitor machine
 void D1(void)
 {
+//================================== Detect error heating boiler hotwater ==========================
 
+    static float f1, f2;
+    if (HeatingHotwater && (HotWater_Vout >= 50)
+            && (HotWater_Temperature_Ref - 5))
+    {
+        if (eVrTimer[eVrHotWaterHeatingTimeOut] >= 150)
+        {
+
+            f1 = Hot_Water.Actual_temperature;
+            // if 20s temperauture not increase 5 degree, heating resistor might be error
+            ErHotWaterTimeOut = (f1 <= (f2 + 3.0f)) ? true : false;
+            f2 = f1;
+            eVrTimer[eVrHotWaterHeatingTimeOut] = 0;
+
+        }
+        else
+            eVrTimer[eVrHotWaterHeatingTimeOut]++;
+    }
+    else
+    {
+        f2 = 0;
+        eVrTimer[eVrHotWaterHeatingTimeOut] = 0;
+        ErHotWaterTimeOut = false;
+    }
+//================================= Detect error heating boiler steam  ==========================
+    static float f3, f4;
+    if (HeatingSteam && (Steam_Vout >= 50) && (Gui_TempSteam < 110))
+    {
+        if (eVrTimer[eVrSteamHeatingTimeOut] >= 200)
+        {
+
+            f3 = Hot_Water.Actual_temperature;
+            // if 20s temperauture not increase 5 degree, heating resistor might be error
+            ErSteamTimeOut = (f3 <= (f4 + 3.0f)) ? true : false;
+            f4 = f3;
+            eVrTimer[eVrSteamHeatingTimeOut] = 0;
+
+        }
+        else
+            eVrTimer[eVrSteamHeatingTimeOut]++;
+    }
+    else
+    {
+        f4 = 0;
+        eVrTimer[eVrSteamHeatingTimeOut] = 0;
+        ErSteamTimeOut = false;
+    }
+
+//=================================== Machine status =============================================
+#ifndef debug
     if (countGrounds >= 50)
         fullOfGroundsDrawer = 1;
-    if (Gui_HotWaterSteam >= 20)
+    if (Gui_HotWaterSteam >= 94)  // Temperature of hotwater steam to extraction
         Suf_HotWater = 1;
     idleMachine = !(InProcess || InStartUp || InCleanning);
     FinishStartUp = Suf_HotWater && HeatingPress;
     En = ((idleMachine) && FinishStartUp && (!fullOfGroundsDrawer) && (!Error));
     EnMakeCoffee = En && HomePage;
+#endif
 //================================ Message id to lcd =============================================
+    SweptErrorMachine();
     Id_Msg_flag = fullOfGroundsDrawer || !idleMachine || Error || En;
 
-
-    (!idleMachine && FinishStartUp) ? (idPage0Display[0] = idModeRunning) : (idPage0Display[0] = 0xFF);
+    (!idleMachine && FinishStartUp) ?
+            (idPage0Display[0] = idModeRunning) : (idPage0Display[0] = 0xFF);
 //---------------------------------------------------------------------------------
     (fullOfGroundsDrawer && idleMachine) ?
             (idPage0Display[1] = 10) : (idPage0Display[1] = 0xFF);
 //---------------------------------------------------------------------------------
     (Error) ? (idPage0Display[2] = 12) : (idPage0Display[2] = 0xFF);
 //---------------------------------------------------------------------------------
-    if (En)
+    if (En && !calibWeightFlag)
     {
         (firstCup) ? (idPage0Display[3] = 0) : (idPage0Display[3] = 0xFE);
 
     }
-    else if(!FinishStartUp)
+    else if (!FinishStartUp)
         idPage0Display[3] = 9;
     else
         idPage0Display[3] = 0xFF;
@@ -879,7 +953,7 @@ void D1(void)
     D_Group_Task = &D1;
 }
 
-//======================================================================================================
+//======================================= Peripheral function ===================================================
 
 void Spi0_LCD_Interface_Cnf()
 {
@@ -936,7 +1010,6 @@ void LCD_Interface_Cnf()
     GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_7, 0);
 
 }
-
 void LCD_Write_Cmd(uint8_t cmd)
 {
     CLR_RS;
@@ -1233,13 +1306,6 @@ void ADS1118_Cal(ADS1118_t *ADS)
 {
 
     int16_t temp;
-
-    /*
-     ADS_Read(1, ADS->Code);     // Hot data request, read  cold data
-     SysCtlDelay(1333333);
-     ADS_Read(0, ADS->Code);     // cold data request, read hot data
-     */
-
     if (ADS->swBit)
     {
         ADS_Read(0, ADS->Code);
@@ -1283,7 +1349,46 @@ void Spi1_ADS1118_Interface_Cnf()
     SSIEnable(SSI1_BASE);
 
 }
+//======================================================================================================
+void SweptErrorMachine(void)
+{
+    uint8_t i;
+    Error = 0;
+    for (i = 0; i < 16; i++)
+    {
+        if (ErrorMachine[i].ErrorFlag != NULL)
 
+        {
+            _Bool e = *ErrorMachine[i].ErrorFlag;
+            Error = Error || e;
+        }
+    }
+
+}
+void WatchdogIntHandler(void)
+{
+// If not feed watchdog timer , not clear interrupt and reset will occur when isr service again
+    if (!feedWacthdog)
+        return;
+    feedWacthdog = false;
+    MAP_WatchdogIntClear(WATCHDOG0_BASE);
+
+}
+void WatchdogInit(void)
+{
+    if (MAP_WatchdogLockState(WATCHDOG0_BASE) == true)
+    {
+        MAP_WatchdogUnlock(WATCHDOG0_BASE);
+    }
+    MAP_WatchdogReloadSet(WATCHDOG0_BASE, MAP_SysCtlClockGet());    // 1s
+    WatchdogIntRegister(WATCHDOG0_BASE, &WatchdogIntHandler);
+#ifdef STALLWD
+    MAP_WatchdogStallEnable(WATCHDOG0_BASE); // Stall watchdog timer when cpu stall use for debug
+#endif
+    MAP_WatchdogResetEnable(WATCHDOG0_BASE); // Enable Reset
+    MAP_WatchdogEnable(WATCHDOG0_BASE);
+
+}
 void defaultISR(void)
 {
 

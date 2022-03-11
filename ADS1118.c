@@ -21,12 +21,6 @@
 #include "driverlib/sysctl.h"
 extern void ADS1118_Coms(uint16_t config, int mode);
 
-void ADS_Config(unsigned int mode)
-{
-    //ADS_Read(mode, ADSCON_CH0);
-    //ADS_Read(mode, ADSCON_CH1);
-
-}
 void ADS_Read(uint16_t mode,uint16_t code)
 {
     //volatile uint8_t DRDY = GPIOPinRead(GPIO_PORTD_BASE, GPIO_PIN_2);

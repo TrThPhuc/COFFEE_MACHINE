@@ -5,13 +5,19 @@
  *      Author: 16126
  */
 #include "Coffee_Machine.h"
+#include "TCA9539.h"
+#include "ADS1118.h"
 extern Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Special_1,
         Mode_Special_2;
+extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
+extern bool Hyteresis, ErSteam, ErHotWater, ErOutletDetect, ErHomeReturn,
+        ErSteamTimeOut, ErHotWaterTimeOut, ErNoPumpPulse;
 //extern float Steam_Temperature_Ref;
 extern float HotWater_Temperature_Ref, Steam_Temperature_Ref;
 extern uint16_t PitchOfpress;
 extern float PulWeightRatio;
 extern _Bool Pr_PacketCopyMask[];
+
 void ParameterDefaultSetting()
 {
     // Small size
@@ -71,4 +77,25 @@ void ParameterDefaultSetting()
     PulWeightRatio = 30;
 
 }
+void AssignErrorList(void)
+{
+    uint8_t i;
+    for(i = 0; i<16;i++)
+        ErrorMachine[i].ErrorFlag = NULL;
+    ErrorMachine[eTCA_Ic1].ErrorFlag = &TCA9539_IC1.ErrorFlag; // Loi giao tiep i2c ic mo rong 1 tca
+    ErrorMachine[eTCA_Ic2].ErrorFlag = &TCA9539_IC2.ErrorFlag; // Loi giao tiep i2c ic mo rong 2 tca
+    ErrorMachine[eTCA_Ic3].ErrorFlag = &TCA9539_IC3.ErrorFlag; // Loi giao tiep i2c ic  mo rong 3 tca
+    ErrorMachine[eAds11118].ErrorFlag = &eCom_Ads1118; //Loi giao tiep ic cam bien ads118
+    ErrorMachine[eFaultMotor].ErrorFlag = NULL;
+    ErrorMachine[eLevelSensor].ErrorFlag = &Hyteresis;  // Loi cam bien muc
+    ErrorMachine[eHotWaterOpen].ErrorFlag = &ErHotWater; // Loi cam bien nhiet binh nc nong
+    ErrorMachine[eHotWaterTimeOut].ErrorFlag = &ErHotWaterTimeOut; // Loi ko dun binh nc nong
+    ErrorMachine[eSteamOpen].ErrorFlag = &ErSteam;  // loi cam bien binh hoi
+    ErrorMachine[eSteamTimeOut].ErrorFlag = &ErSteamTimeOut; // Loi ko dun binh hoi
+    ErrorMachine[ePumpPulseFast].ErrorFlag = NULL;
+    ErrorMachine[ePumpPulseSlow].ErrorFlag = NULL;
+    ErrorMachine[eNoPumpPulse].ErrorFlag = &ErNoPumpPulse; // Loi ko co xung luu luong
+    ErrorMachine[eCoffeOutletDetect].ErrorFlag = &ErOutletDetect; // Loi cam bien ca phe ra
+    ErrorMachine[eHomeReturn].ErrorFlag = &ErHomeReturn;   // loi ve home ko bat
 
+}

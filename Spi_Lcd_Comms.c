@@ -93,6 +93,7 @@ void Page7_Display(void);   // Page 2 display
 void defaultcmd(void);
 void pageWelcom_Display(void);
 void Page_Cursor_Display(uint8_t page, uint8_t pos);   // Display cursor
+void DisplayError(void);
 
 // Function prototype for EEPROM emulator
 extern void SaveParameterToEEPROM(void);
@@ -107,12 +108,20 @@ void (*PagePointer)(void);                  // Page pointer
 extern void clearBuffer(void *ptr);
 extern void WriteImageToDriverLCD(void *bufferPtr);
 extern void LCD_Write_Dat(uint8_t cmd);
-extern int16_t VrTimer1[4];
+/*
+ * VrTimer0 refresh page
+ * VrTimer1 hold button set(home) lcd
+ * VrTimer2 boot page
+ * VrTimer3 display temp
+ */
+extern int16_t VrTimer1[8];
 
 extern void LCD_Address_Set(uint8_t page, uint8_t column);
 extern uint8_t LCD_IMAGE[1024];
 extern uint8_t bitmapCoffeeE1[];
 extern uint8_t bitmapCoffeeE2[];
+extern _Bool Error;
+extern Error_t ErrorMachine[16];
 uint8_t Pr_Index = 0, NumOfPr, Offset = 0;    // Indicator  parameter
 char *strMode;
 uint8_t idMask;
@@ -131,7 +140,8 @@ volatile uint8_t BsetFlag, BdownFlag, BupFlag;     // Flag used for scan process
 // Acknowledge Flag
 uint8_t Ack_PrAdj = 0;
 uint8_t Up_window_index = 3, Down_window_index = 0; // Windown display - 4 line
-extern bool calibVolumeFlag, calibVolumeStr;
+extern bool calibWeightFlag, calibWeightStr;
+extern uint8_t calibWeightObj;
 extern uint16_t *dataSentList[]; //  Kernel terminal connect to monitor variable
 extern bool En, idleMachine, InCleanning, InProcess;
 #define NumberOfParameter 32
@@ -153,6 +163,7 @@ uint8_t save_pr, cpy_pr;
 _Bool boostFlag = 1, HomePage = 0;
 char *Str_Display;
 char Str_Temp[12];
+char Str_ErrorNum[10];
 
 char *LCD_String_Page6[8] = { "Pre-infusion: ", "Nuoc ra: ", "T chiec suat:",
                               "Thoi gian xay: ", "Nhiet do: ", "Do day ep" }; //
@@ -190,7 +201,7 @@ union NumConvert_u LCD_Min_Parameter[6] = { { .unintNum = 4 },
                                             { .floatNum = 5 },
                                             { .floatNum = 90 },
                                             { .unintNum = 11 } };
-float LCD_Max_Calib = 200.0f, LCD_Min_Calib = 20.0f;
+
 float LCD_Step_Calib = 0.1f;
 char str[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x7C, 0x38,
                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -388,7 +399,7 @@ void ButtonSet_cmd()
             {
                 current_page = 0;
                 // Save parameter to eeprom
-                VrTimer1[2] = 150;
+                VrTimer1[2] = 150;  // VrTimer2 for display boot page
                 boostFlag = 1;
                 save_pr = 1;
                 NodeSelected = &Menu;
@@ -503,14 +514,14 @@ void PageDisplay()
 {
     uint16_t i;
 
-    if (calibVolumeStr)
+    if (calibWeightStr)
     {
-        ObjSelect = (uint32_t*) &Pr_PacketCopy[31];
+        ObjSelect = (uint32_t*) &Pr_PacketCopy[calibWeightObj];
         ObjSelectStep = (uint32_t*) &LCD_Step_Calib;
-        ObjSelectMax = (uint32_t*) &LCD_Max_Calib;
-        ObjSelectMin = (uint32_t*) &LCD_Min_Calib;
+        ObjSelectMax = (uint32_t*) &LCD_Max_Parameter[3];
+        ObjSelectMin = (uint32_t*) &LCD_Min_Parameter[3];
         ObjSelectFlag = 1;
-        calibVolumeStr = 0;
+        calibWeightStr = HomePage = 0;
         current_page = 10;
         page_change = floatmath = 1;
     }
@@ -621,10 +632,10 @@ void PageDisplay()
 
     }
     if (boostFlag != 0)
-        //     goto ssw;
+        // VrTimer2 for display boot page
         (VrTimer1[2] > 250) ? (boostFlag = 0, page_change = 1) : VrTimer1[2]++;
 //---------------------Refesh page--------------------------------------
-    if (VrTimer1[0] > 12)
+    if (VrTimer1[0] > 12)   // VrTimer for refresh page
     {
         VrTimer1[0] = 0;
 #ifdef uDma_SSI0
@@ -715,8 +726,8 @@ void Page0_Display(void)
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]); // pulse volumeter
     Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
 #endif
-        if (calibVolumeFlag)
-            Disp_Str_5x8_Image(6, 45, "Calib", LCD_IMAGE);
+        if (calibWeightFlag)
+            Disp_Str_5x8_Image(5, 10, "Weight Calibration", LCD_IMAGE);
 // Copy_bitExImage((void*) bitmap);
         for (i = 0; i < 4; i++)
         {
@@ -735,24 +746,24 @@ void Page0_Display(void)
 
                 // Display image make cofffee process
             case 5:
-                Disp_20x20_Image(4, 82, (uint8_t*) bitmapCoffeeE1,
+                Disp_20x20_Image(3, 82, (uint8_t*) bitmapCoffeeE1,
                                  (uint8_t*) LCD_IMAGE);
                 goto skip;
             case 6:
-                Disp_20x20_Image(4, 78, (uint8_t*) bitmapCoffeeE1,
+                Disp_20x20_Image(3, 78, (uint8_t*) bitmapCoffeeE1,
                                  (uint8_t*) LCD_IMAGE);
-                Disp_20x20_Image(4, 103, (uint8_t*) bitmapCoffeeE1,
+                Disp_20x20_Image(3, 103, (uint8_t*) bitmapCoffeeE1,
                                  (uint8_t*) LCD_IMAGE);
                 goto skip;
             case 7:
-                Disp_20x20_Image(4, 90, (uint8_t*) bitmapCoffeeE2,
+                Disp_20x20_Image(3, 90, (uint8_t*) bitmapCoffeeE2,
                                  (uint8_t*) LCD_IMAGE);
                 goto skip;
             case 8:
-                Disp_20x20_Image(4, 78, (uint8_t*) bitmapCoffeeE2,
+                Disp_20x20_Image(3, 78, (uint8_t*) bitmapCoffeeE2,
                                  (uint8_t*) LCD_IMAGE);
 
-                Disp_20x20_Image(4, 103, (uint8_t*) bitmapCoffeeE2,
+                Disp_20x20_Image(3, 103, (uint8_t*) bitmapCoffeeE2,
                                  (uint8_t*) LCD_IMAGE);
                 goto skip;
 
@@ -764,7 +775,7 @@ void Page0_Display(void)
             case 255:
                 break;
                 skip: Str_Display = LCD_String_Page0[id_Page0];
-                Disp_Str_8x16_Image(4, LCD_PosStr_page0[id_Page0],
+                Disp_Str_8x16_Image(3, LCD_PosStr_page0[id_Page0],
                                     (uint8_t*) Str_Display);
                 sprintf(Str_Temp, "%.1f", ppi);         // hot water temperature
                 Disp_Str_5x8_Image(7, 82, (uint8_t*) Str_Temp, LCD_IMAGE);
@@ -794,6 +805,8 @@ void Page0_Display(void)
                 Str_Display = LCD_String_Page0[id_Page0];
                 Disp_Str_5x8_Image(8, LCD_PosStr_page0[id_Page0],
                                    (uint8_t*) Str_Display, LCD_IMAGE);
+                DisplayError();
+                break;
             }
         }
 // Display number of cups
@@ -969,11 +982,11 @@ void Page7_Display()
 {
     Str_Display = "Calibration";
     Disp_Str_8x16_Image(2, 25, (uint8_t*) Str_Display);
-    Str_Display = "Nhap Khoi luong: ";
+    Str_Display = "Thoi gian: ";
     Disp_Str_5x8_Image(5, 20, (uint8_t*) Str_Display, LCD_IMAGE);
-    sprintf(Str_Temp, "%.1f", *(float*) &Pr_PacketCopy[31]);
+    sprintf(Str_Temp, "%.1f", *(float*) &Pr_PacketCopy[calibWeightObj]);
     Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
-    Str_Display = "g";
+    Str_Display = "s";
     Disp_Str_5x8_Image(7, 70, (uint8_t*) Str_Display, LCD_IMAGE);
 }
 void pageWelcom_Display()
@@ -993,7 +1006,39 @@ void pageWelcom_Display()
         Disp_Str_5x8_Image(7, 45, (uint8_t*) Str_Display, LCD_IMAGE);
     }
 }
+void DisplayError(void)
+{
+    uint8_t i;
+    static uint8_t imask = 0;
 
+    if (Error)
+    {
+        if (VrTimer1[5] > 2)
+        {
+            for (i = imask; i < 16; i++)
+            {
+                if (ErrorMachine[i].ErrorFlag == NULL)
+                    continue;
+                if (*ErrorMachine[i].ErrorFlag == true)
+                {
+                    sprintf(Str_ErrorNum, "%d", i);
+                    imask = i;
+                    break;
+                }
+
+            }
+            (i < 16) ? (imask++, VrTimer1[5] = 0) : (imask = 0);
+        }
+        else
+            VrTimer1[5]++;
+
+        char eStr[5] = "E";
+        strcat(eStr, Str_ErrorNum);
+        Disp_Str_5x8_Image(8, 50, (uint8_t*) eStr, LCD_IMAGE);
+        return;
+    }
+    imask = 0;
+}
 void Page_Cursor_Display(uint8_t page, uint8_t pos)
 {
     uint8_t n, col;

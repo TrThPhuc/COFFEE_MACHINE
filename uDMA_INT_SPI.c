@@ -224,14 +224,39 @@ void SSI1_IntHandler(void)
 
         datas = ui16RxBuf[0];
         fb_config = ui16RxBuf[1];
-        if (fb_config == (0xB3B))       //8b9a & 7FFF = B9A
-            Steam.hot_data = datas;     //Steam.Code = 0x8B8A
-        else if (fb_config == 0xB2B)    //8b8a & 7FFF = B8A
+        /*        if (fb_config == (0xB3B))       //8b9a & 7FFF = B9A
+         Steam.hot_data = datas;     //Steam.Code = 0x8B8A
+         else if (fb_config == 0xB2B)    //8b8a & 7FFF = B8A
+         Steam.cold_data = datas;
+         else if (fb_config == 0x3B3B)   // CH1 BB8A         // Hot_Water
+         Hot_Water.hot_data = datas; //bb9a & 7FFF = 3b9a
+         else if (fb_config == 0x3B2B)   //bb8a & 7fff = 3b8a
+         Hot_Water.cold_data = datas;
+         else
+         eCom_Ads1118 = 1;*/
+        switch (fb_config)
+        {
+        case 0xB3B:
+            Steam.hot_data = datas;
+            eCom_Ads1118 = 0;
+            break;
+        case 0xB2B:
             Steam.cold_data = datas;
-        else if (fb_config == 0x3B3B)   // CH1 BB8A         // Hot_Water
-            Hot_Water.hot_data = datas; //bb9a & 7FFF = 3b9a
-        else if (fb_config == 0x3B2B)   //bb8a & 7fff = 3b8a
+            eCom_Ads1118 = 0;
+            break;
+        case 0x3B3B:
+            Hot_Water.hot_data = datas;
+            eCom_Ads1118 = 0;
+            break;
+        case 0x3B2B:
             Hot_Water.cold_data = datas;
+            eCom_Ads1118 = 0;
+            break;
+        default:
+            eCom_Ads1118 = 1;
+            break;
+
+        }
 
     }
 }

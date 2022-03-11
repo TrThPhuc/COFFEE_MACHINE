@@ -31,7 +31,8 @@ StepInCleanningProcess Cl_Step;
 
 // Compress process
 uint32_t pos1 = 118, pos2 = 149;  // position for compress process
-uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 1000, stepPos4 = 80;
+uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 1000, stepPos4 = 80, stepPos5 = 600;
+// unit X (mm) * 100 = stepPos
 
 //175 210
 // Pumping timming
@@ -69,5 +70,8 @@ uint32_t pp1, pp2, pp3, ppo;
 float ppi = 0;
 float buffervel[8], tempv, avgvel;
 
+
+#define timeRinse 6
+#define timeClear 60
 extern uint8_t idModeRunning;
 #endif /* CM_LOWLEVEL_CMD_H_ */

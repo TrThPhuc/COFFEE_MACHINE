@@ -32,6 +32,8 @@ extern ADS1118_t Steam, Hot_Water;
 _Bool PWMSSR1Enable, PWMSSR2Enable, PWMSSR3Enable;
 _Bool SteamMask, HotWaterMask, ExtrudeMask;
 _Bool ErSteam, ErHotWater, ErExtrude;
+extern volatile _Bool Hyteresis;
+volatile _Bool HeatingSteam, HeatingHotwater;
 
 ADS1118_t *Temp_ptr;
 // True task 125ms
@@ -100,20 +102,22 @@ void Temperature_Control(void)
 
         }
         // Shutdow if overshoot termperature
-        if (Hot_Water.Actual_temperature >= Shutdown_Temp_HotWater)
+
+        ErHotWater = (Hot_Water.Actual_temperature == 0xA5A5) ? true : false;
+        if (Hot_Water.Actual_temperature >= Shutdown_Temp_HotWater
+                || ErHotWater)
         {
-            HotWaterMask = 1;
+            HotWaterMask = 1;   // Mask Hot water control
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4);  // turn off
-            ErHotWater =
-                    (Hot_Water.Actual_temperature == 0xA5A5) ? true : false;
+
         }
         else
             HotWaterMask = 0;
-        if (Steam.Actual_temperature >= Shutdown_Temp_Steam)
+        ErSteam = (Steam.Actual_temperature == 0xA5A5) ? true : false;
+        if (Steam.Actual_temperature >= Shutdown_Temp_Steam || ErSteam)
         {
-            SteamMask = 1;
+            SteamMask = 1;     // MasK steam water control
             GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_PIN_5);
-            ErSteam = (Steam.Actual_temperature == 0xA5A5) ? true : false;
 
         }
         else
@@ -130,17 +134,14 @@ void Temperature_Control(void)
     }
 
 }
-void ShutDownPWM(void)
-{
 
-}
 void LowFreqPWM(void)
 {
     TimerIntClear(TIMER5_BASE, TIMER_TIMA_TIMEOUT);
-//--------------------SSR1---------------------------------------
-    if (PWMSSR1Enable && !SteamMask)
+//---------------------------------------------SSR1 - Steam -----------------------------------------
+    if (PWMSSR1Enable && !SteamMask && !Hyteresis)
     {
-
+        HeatingSteam = true;
         if (dutyCount_SSR1 == activeDuty_SRR1)
             GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_5, 0);
         if (dutyCount_SSR1 < 100)
@@ -154,11 +155,15 @@ void LowFreqPWM(void)
 
     }
     else
+    {
+        HeatingSteam = false;
         GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_5, GPIO_PIN_5);
+    }
 
-//--------------------SSR2---------------------------------------
+//-----------------------------------------------SSR2 - Hotwater -------------------------------------
     if (PWMSSR2Enable && !HotWaterMask)
     {
+        HeatingHotwater = true;
         if (dutyCount_SSR2 == activeDuty_SRR2)
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0); // turn on ssr out
         if (dutyCount_SSR2 < 100)
@@ -175,9 +180,12 @@ void LowFreqPWM(void)
 
     }
     else
+    {
+        HeatingHotwater = false;
         GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4); // turn off ssr out
+    }
 
-//--------------------SSR3---------------------------------------
+//------------------------------------------SSR3 - Heating compress ------------------------------------
     if (PWMSSR3Enable && !ExtrudeMask)
     {
         if (dutyCount_SSR3 == activeDuty_SRR3)

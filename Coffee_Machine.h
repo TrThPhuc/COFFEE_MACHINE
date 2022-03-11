@@ -31,6 +31,8 @@
 #include "driverlib/interrupt.h"
 #include "driverlib/udma.h"
 #include "driverlib/eeprom.h"
+#include "driverlib/watchdog.h"
+#include "driverlib/rom_map.h"
 
 // System define
 //#define SysCltEeprom
@@ -56,7 +58,7 @@ typedef struct Mode_Parameter
     uint32_t Time;                  // Time for extraction  Uinit - second
 
     struct AmountofWater AmountOfWaterPumping;
-    float GrindingDuration;      // Grinding interval. Uint - 0.1s
+    float GrindingDuration;         // Grinding interval. Uint - 0.1s
     uint32_t WeigtOfPowder;         //  Weight of coffe powder - g
     bool DirGrinding;               // CW or CCW Grinding
     uint32_t Pitch;
@@ -65,7 +67,7 @@ typedef struct Mode_Parameter
 
 } Mode_Parameter_t;
 void ParameterDefaultSetting();
-
+void AssignErrorList(void);
 enum GuiParamter
 {
     cupsEspresso_1,
@@ -84,6 +86,48 @@ enum GuiParamter
     PulseCount,
 
 };
+enum errorlist
+{
+    eTCA_Ic1,
+    eTCA_Ic2,
+    eTCA_Ic3,
+    eAds11118,
+    eFaultMotor,
+    eLevelSensor,
+    eHotWaterOpen,
+    eHotWaterTimeOut,
+    eSteamOpen,
+    eSteamTimeOut,
+    ePumpPulseFast,
+    ePumpPulseSlow,
+    eNoPumpPulse,
+    eCoffeOutletDetect,
+    eHomeReturn
+};
+enum warningList
+{
+    wRonTimeLife, wBladeLife, wTempHotwater
 
+};
+typedef struct
+{
+    bool *ErrorFlag;
+    uint8_t id;
+
+} Error_t;
+Error_t ErrorMachine[16];
+uint8_t ErrorMachine_id[16];
+extern uint16_t eVrTimer[8];
+typedef enum eVrTimerList_e
+{
+    eVrCoffeOutlet,
+    eVrPumpPulseFast,
+    eVrPumpPulseSlow,
+    eVrNoPumpPulse,
+    eVrHomeReturn,
+    eVrHotWaterHeatingTimeOut,
+    eVrSteamHeatingTimeOut,
+    eVrPumpingPulse
+} eVrTimerList;
 uint32_t ti;
 #endif /* COFFEE_MACHINE_H_ */
