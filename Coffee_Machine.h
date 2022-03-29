@@ -33,19 +33,27 @@
 #include "driverlib/eeprom.h"
 #include "driverlib/watchdog.h"
 #include "driverlib/rom_map.h"
-
-// System define
-//#define SysCltEeprom
-//#define SaveEeprom
+#include "driverlib/fpu.h"
 
 #define BOARD 1
 #define pwm 1
 #define Npwm 0
+#define Grind Npwm
+
 #define scooter 1
 #define bldc 0
 #define Grindmotor bldc
-#define Grind Npwm
+
+#define SteamWarming 1
+#define HeatingResWarming 0
+
+#define WarmingMethod HeatingResWarming
+
 #define PosPress 1
+#define Int_SSI0
+
+#define HighLvSensor 2.2
+#define LowLvSensor 1.1
 
 struct AmountofWater
 {
@@ -76,7 +84,8 @@ enum GuiParamter
     cupsSpecial_2,
     HotWaterTemp,
     ExtractionTime,
-    BladeNofTimesUsed,
+    Blade1NofTimesUsed,
+    Blade2NofTimesUsed,
     RonNofTimesUsed,
     Brand,
     SeriNumber,
@@ -84,8 +93,11 @@ enum GuiParamter
     ProductDate,
     tempExtrude,
     PulseCount,
+    ExtractAtimes,
+    ExtractBtimes
 
 };
+
 enum errorlist
 {
     eTCA_Ic1,
@@ -113,6 +125,7 @@ typedef struct
 {
     bool *ErrorFlag;
     uint8_t id;
+    char *ErrorMsg;
 
 } Error_t;
 Error_t ErrorMachine[16];

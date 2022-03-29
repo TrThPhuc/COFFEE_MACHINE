@@ -58,11 +58,12 @@ uint8_t *LCD_IMAGE_Ptr;
 #endif
 //volatile uint8_t currentBuffer;
 uint32_t ui32SrcBuf[1] = { 0x00 };
-extern volatile bool Write_ready;
+volatile bool Write_ready;
 volatile uint16_t tx_tail, tx_head = 0;
 extern void LCD_Address_Set(uint8_t page, uint8_t column);
 extern void LCD_Write_Cmd(uint8_t cmd);
 ////////////////////////////////////////////////////////////////////
+#ifdef uDma_SSI0
 void uDMAIntHandler(void)
 {
     uint32_t ui32Mode;
@@ -89,9 +90,39 @@ void Init_SW_DMA(void)
     UDMA_SIZE_32 | UDMA_SRC_INC_NONE | UDMA_DST_INC_32 |
     UDMA_ARB_256);
 
-    //  uDMAChannelEnable(UDMA_CHANNEL_SW);
-    // uDMAChannelRequest(UDMA_CHANNEL_SW);
 }
+void Init_LCDSPI_DMA(void)
+{
+    SSIDMAEnable(SSI0_BASE, SSI_DMA_TX);
+    uDMAControlBaseSet(ui8ControlTable);
+    uDMAChannelAttributeDisable(
+            UDMA_CHANNEL_SSI0TX,
+            UDMA_ATTR_USEBURST | UDMA_ATTR_ALTSELECT | UDMA_ATTR_HIGH_PRIORITY
+                    | UDMA_ATTR_REQMASK);
+
+    // Configure channel control structure
+
+    // Transmit
+    uDMAChannelControlSet(      //  Primary Control word
+            UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
+            UDMA_SIZE_8 | UDMA_SRC_INC_8 | UDMA_DST_INC_NONE | UDMA_ARB_4);
+
+}
+void WriteImageToDriverLCD(void *bufferPtr)
+{
+    if (pagelcd == 0)
+    {
+        currentBuffer = bufferPtr;
+        uDMAChannelTransferSet( UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
+        UDMA_MODE_BASIC,
+                               currentBuffer, (void*) (SSI0_BASE + SSI_O_DR),
+                               128);
+
+        uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
+    }
+
+}
+#endif
 ////////////////////////////////////////////////////////////////////
 void clearBuffer(void *ptr)
 {
@@ -116,51 +147,10 @@ void Copy_bitExImage(void *ptr)
     uDMAChannelRequest(UDMA_CHANNEL_SW);
 
 }
-////////////////////////////////////////////////////////////////////
-void Init_LCDSPI_DMA(void)
-{
-    SSIDMAEnable(SSI0_BASE, SSI_DMA_TX);
-    uDMAControlBaseSet(ui8ControlTable);
-    uDMAChannelAttributeDisable(
-            UDMA_CHANNEL_SSI0TX,
-            UDMA_ATTR_USEBURST | UDMA_ATTR_ALTSELECT | UDMA_ATTR_HIGH_PRIORITY
-                    | UDMA_ATTR_REQMASK);
-
-    // Configure channel control structure
-
-    // Transmit
-    uDMAChannelControlSet(      //  Primary Control word
-            UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
-            UDMA_SIZE_8 | UDMA_SRC_INC_8 | UDMA_DST_INC_NONE | UDMA_ARB_4);
-
-}
-////////////////////////////////////////////////////////////////////
-void SSI0_DMA_IntHandler(void)
-{
-    /*    uint32_t ui32Status;
-     ui32Status = SSIIntStatus(SSI0_BASE, true);
-     SSIIntClear(SSI0_BASE, ui32Status);
-     if (!uDMAChannelIsEnabled(UDMA_CHANNEL_SSI0TX))
-     {
-     if (page < 8)
-     {
-     page++;
-
-     SSIDataPut(SSI0_BASE, );
-
-     uDMAChannelTransferSet( UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
-     UDMA_MODE_BASIC,
-     (void*) (currentBuffer + page * 132),
-     (void*) (SSI0_BASE + SSI_O_DR), 2);
-     uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
-
-     }
-     else
-     uDMAChannelDisable(UDMA_CHANNEL_SSI0TX);
-
-     }*/
-
-}
+//============================================================================
+// DMA: DMA SPI1
+// Interface with: ADS11178
+//============================================================================
 void Init_SPI_DMA(void)
 {
 
@@ -224,16 +214,6 @@ void SSI1_IntHandler(void)
 
         datas = ui16RxBuf[0];
         fb_config = ui16RxBuf[1];
-        /*        if (fb_config == (0xB3B))       //8b9a & 7FFF = B9A
-         Steam.hot_data = datas;     //Steam.Code = 0x8B8A
-         else if (fb_config == 0xB2B)    //8b8a & 7FFF = B8A
-         Steam.cold_data = datas;
-         else if (fb_config == 0x3B3B)   // CH1 BB8A         // Hot_Water
-         Hot_Water.hot_data = datas; //bb9a & 7FFF = 3b9a
-         else if (fb_config == 0x3B2B)   //bb8a & 7fff = 3b8a
-         Hot_Water.cold_data = datas;
-         else
-         eCom_Ads1118 = 1;*/
         switch (fb_config)
         {
         case 0xB3B:
@@ -260,6 +240,7 @@ void SSI1_IntHandler(void)
 
     }
 }
+//============================================================================
 void WriteConfigture()
 {
     uDMAChannelControlSet(      //  Primary Control word
@@ -271,20 +252,7 @@ void WriteConfigture()
 
 }
 
-void WriteImageToDriverLCD(void *bufferPtr)
-{
-    if (pagelcd == 0)
-    {
-        currentBuffer = bufferPtr;
-        uDMAChannelTransferSet( UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
-        UDMA_MODE_BASIC,
-                               currentBuffer, (void*) (SSI0_BASE + SSI_O_DR),
-                               128);
 
-        uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
-    }
-
-}
 void WriteTxFiFO(uint8_t c)
 {
     ui8TxBuf[tx_tail] = c;

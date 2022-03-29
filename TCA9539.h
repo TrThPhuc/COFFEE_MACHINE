@@ -9,6 +9,7 @@
 #define TCA9539_H_
 
 #include "stdbool.h"
+#include "stdint.h"
 //#define interrupt_method    // Using interrupt method
 #define Polling_method
 /************************** I2C Address ***************************************/
@@ -157,4 +158,9 @@ unsigned char I2C_Write_Buffer(unsigned char Slave_Add, unsigned char Res_Add,
                                unsigned char *data, unsigned char count);
 void I2CSlaveIntHandler(void);
 void I2C_Interrupt_Handler();
+
+inline void TCA9539Regs_Write16Pin(TCA9539Regs *thisTCA, uint16_t pin,
+                                   _Bool value);
+inline _Bool TCA9539Regs_Read16Pin(TCA9539Regs *thisTCA, uint16_t pin);
 #endif /* TCA9539_H_ */
+

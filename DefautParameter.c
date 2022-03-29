@@ -15,8 +15,9 @@ extern bool Hyteresis, ErSteam, ErHotWater, ErOutletDetect, ErHomeReturn,
 //extern float Steam_Temperature_Ref;
 extern float HotWater_Temperature_Ref, Steam_Temperature_Ref;
 extern uint16_t PitchOfpress;
-extern float PulWeightRatio;
 extern _Bool Pr_PacketCopyMask[];
+extern uint32_t wBladeATimes, wBladeBTimes, wExtractionATimes,
+        wExtractionBTimes;
 
 void ParameterDefaultSetting()
 {
@@ -73,15 +74,18 @@ void ParameterDefaultSetting()
     HotWater_Temperature_Ref = 92;
     Steam_Temperature_Ref = 120;
     PitchOfpress = 15;
-
-    PulWeightRatio = 30;
+    wBladeATimes = 20000;
+    wBladeBTimes = 20000;
+    wExtractionATimes = 80000;
+    wExtractionBTimes = 80000;
 
 }
 void AssignErrorList(void)
 {
     uint8_t i;
-    for(i = 0; i<16;i++)
+    for (i = 0; i < 16; i++)
         ErrorMachine[i].ErrorFlag = NULL;
+    //---------------------------------------------------------------------------------------------
     ErrorMachine[eTCA_Ic1].ErrorFlag = &TCA9539_IC1.ErrorFlag; // Loi giao tiep i2c ic mo rong 1 tca
     ErrorMachine[eTCA_Ic2].ErrorFlag = &TCA9539_IC2.ErrorFlag; // Loi giao tiep i2c ic mo rong 2 tca
     ErrorMachine[eTCA_Ic3].ErrorFlag = &TCA9539_IC3.ErrorFlag; // Loi giao tiep i2c ic  mo rong 3 tca
@@ -97,5 +101,22 @@ void AssignErrorList(void)
     ErrorMachine[eNoPumpPulse].ErrorFlag = &ErNoPumpPulse; // Loi ko co xung luu luong
     ErrorMachine[eCoffeOutletDetect].ErrorFlag = &ErOutletDetect; // Loi cam bien ca phe ra
     ErrorMachine[eHomeReturn].ErrorFlag = &ErHomeReturn;   // loi ve home ko bat
+    //---------------------------------------------------------------------------------------------
+
+    ErrorMachine[eTCA_Ic1].ErrorMsg = "Loi giao tiep tca1";
+    ErrorMachine[eTCA_Ic1].ErrorMsg = "Loi giao tiep tca2";
+    ErrorMachine[eTCA_Ic1].ErrorMsg = "Loi giao tiep tca3";
+    ErrorMachine[eAds11118].ErrorMsg = "Loi giao tiep ads1118";
+    ErrorMachine[eFaultMotor].ErrorMsg = "Loi dong co ep";
+    ErrorMachine[eLevelSensor].ErrorMsg = "Loi Cam bien muc";
+    ErrorMachine[eHotWaterOpen].ErrorMsg = "Loi cam bien nhiet nc";
+    ErrorMachine[eHotWaterTimeOut].ErrorMsg = "Loi ko dun nuoc";
+    ErrorMachine[eSteamOpen].ErrorMsg = "Loi cam bien nhiet hoi";
+    ErrorMachine[eSteamTimeOut].ErrorMsg = "Loi ko dun hoi";
+    ErrorMachine[ePumpPulseFast].ErrorMsg = "";
+    ErrorMachine[ePumpPulseSlow].ErrorMsg = "";
+    ErrorMachine[eNoPumpPulse].ErrorMsg = "Loi ko xung luu luong";
+    ErrorMachine[eCoffeOutletDetect].ErrorMsg = "loi cam bien cafe ra";
+    ErrorMachine[eHomeReturn].ErrorMsg = "Loi ve home";
 
 }

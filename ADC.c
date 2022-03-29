@@ -26,7 +26,7 @@
 
 uint32_t ui32ADCBuffer[8];
 //static enum BUFFER_STATUS ui32BufferStatus[2];
-float fADC_LevelSensor, fADC_TempPressureBrew;
+float fADC_LevelSensor, fADC_TempWarming;
 static float K_Level;
 volatile uint8_t range = 0;
 float VRT, VR, RT, TX, ln, temp;
@@ -85,14 +85,14 @@ void ADC_Cfg()
 }
 void ADC_READ(void)
 {
-    fADC_TempPressureBrew = ui32ADCBuffer[temperaturePressurebrew] * K_Level;       // ex temp
+    fADC_TempWarming = ui32ADCBuffer[temperaturePressurebrew] * K_Level; // ex temp
     // fADC_LevelSensor = (ui32ADCBuffer[levelsensor] * K_Level  - 0.6) * 10.16;   //10 // used for pressure sensor
-    fADC_LevelSensor = ui32ADCBuffer[levelsensor] * K_Level;            // level sensor
+    fADC_LevelSensor = ui32ADCBuffer[levelsensor] * K_Level;     // level sensor
 
 }
 void CNTL_Extrude()
 {
-    VRT = fADC_TempPressureBrew;      //Conversion to voltage
+    VRT = fADC_TempWarming;      //Conversion to voltage
     if (VRT > 0)
     {
         VR = (float) 5 - VRT;
@@ -106,35 +106,35 @@ void CNTL_Extrude()
     case 0:
         if (temp < 35)
         {
-            Extrude_Vout = 99;
+            Extrude_Vout = 80;
             range = 0;
         }
         else
             range = 1;
         break;
     case 1:
-        if (32 < temp && temp < 45)
+        if (32 < temp && temp < 47)
         {
-            Extrude_Vout = 95;
+            Extrude_Vout = 70;
             range = 1;
         }
         else
         {
-            if (temp > 44)
+            if (temp > 46)
                 range = 2;
             else
                 range = 0;
         }
         break;
     case 2:
-        if (44 < temp && temp < 52)
+        if (46 < temp && temp < 56)
         {
             range = 2;
-            Extrude_Vout = 45;
+            Extrude_Vout = 50;
         }
         else
         {
-            if (temp > 51)
+            if (temp > 55)
                 range = 3;
 
             else
@@ -143,14 +143,14 @@ void CNTL_Extrude()
         }
         break;
     case 3:
-        if (50 < temp && temp < 53)
+        if (55 < temp && temp < 60)
         {
             Extrude_Vout = 30;
             range = 3;
         }
         else
         {
-            if (temp > 52)
+            if (temp > 59)
                 range = 4;
             else
                 range = 2;
@@ -158,13 +158,28 @@ void CNTL_Extrude()
         }
         break;
     case 4:
-        if (temp > 52)
+        if (59 < temp && temp < 62)
         {
-            Extrude_Vout = 0;
+            Extrude_Vout = 15;
             range = 4;
         }
         else
-            range = 3;
+        {
+            if (temp > 61)
+                range = 5;
+            else
+                range = 3;
+
+        }
+        break;
+    case 5:
+        if (temp > 61)
+        {
+            Extrude_Vout = 0;
+            range = 5;
+        }
+        else
+            range = 4;
         break;
 
     }

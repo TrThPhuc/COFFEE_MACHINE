@@ -66,9 +66,10 @@ void Temperature_Control(void)
                 CNTL_2P2Z(&Steam_CNTL);
             if (PWMSSR2Enable)
                 CNTL_2P2Z(&HotWater_CNTL);
+
+/*            if (PWMSSR3Enable)
+                CNTL_Extrude();*/
 #endif
-            if (PWMSSR3Enable)
-                CNTL_Extrude();
             SteamTempBuffer[counttest] = Steam.Actual_temperature;
             tempvalue = 0;
             int i;
