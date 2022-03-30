@@ -30,6 +30,10 @@ StepInCleanningProcess Cl_Step;
 #define UnitTimer 0.02 // 0.02s - 20ms
 
 // Compress process
+
+#define dirCompress_M2 true
+#define dirReturnHome_M2 false
+
 uint32_t pos1 = 118, pos2 = 149;  // position for compress process
 uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 1000, stepPos4 = 80, stepPos5 = 600;
 // unit X (mm) * 100 = stepPos
@@ -45,10 +49,12 @@ uint32_t speedTemp, defaulSpeed = 10000;
 // Pumping process
 #define PreInfusion_pump   700
 #define HighPressure_Pump   5000
+#define CleanPressure_Pump 2000
+
 #define MaxSpeed 6000  //6700
-uint32_t speedgrind = 50000;
 #define MaxVolume 1000
 #define CleanVolume 400
+uint32_t speedgrind = 50000;
 
 // Coffee extraction time
 uint32_t CoffeeExtractionTime;

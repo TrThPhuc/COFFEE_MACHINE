@@ -653,8 +653,7 @@ void C1(void)
             idModeRunning = 8;
             mode_str = true;
             calibWeightObj = 226;
-            test_step = 1;
-            step = 2;
+
             release_mode = 0;
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso1_Bt) == 0)
@@ -675,8 +674,7 @@ void C1(void)
             idModeRunning = 6;
             calibWeightObj = 10;
             mode_str = true;
-            test_step = 1;
-            step = 2;
+
             release_mode = 0;
         }
     }
@@ -852,7 +850,7 @@ void D1(void)
 
     }
 
-//================================== Detect error heating boiler hotwater ==========================
+//================================== Detect error heating  hotwater ==========================
 
     static float f1, f2;
     if (HeatingHotwater && (HotWater_Vout >= 50)

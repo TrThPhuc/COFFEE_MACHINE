@@ -93,7 +93,7 @@ void FlowMeterCal()
         {   // 2s
             eVrTimer[eVrPumpingPulse] = 0;
             v1 = MilliLitresBuffer;
-            ErNoPumpPulse = (v1 <= v2) ? true : false;
+          //  ErNoPumpPulse = (v1 <= v2) ? true : false;
             v2 = v1;
 
         }
