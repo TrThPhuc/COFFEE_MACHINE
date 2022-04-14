@@ -101,7 +101,7 @@ void CNTL_Extrude()
         TX = (1 / ((ln / B) + (1 / T0))); //Temperature from thermistor
         temp = TX - 273.15;
     }
-    switch (range)
+ /*   switch (range)
     {
     case 0:
         if (temp < 35)
@@ -183,4 +183,5 @@ void CNTL_Extrude()
         break;
 
     }
+    */
 }

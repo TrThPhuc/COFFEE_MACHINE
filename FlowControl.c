@@ -30,6 +30,9 @@
 #define QEIVelTimer10m 800000
 
 extern volatile float MilliLitresBuffer;
+float FlowMeter;
+uint32_t FlowMeter_Pulse;
+
 extern float SetVolume;
 extern volatile bool FinishPumpEvent;
 extern float Calibration;
@@ -37,9 +40,9 @@ extern CNTL_2P2Z_Terminal_t Steam_CNTL;
 extern _Bool InPumping;
 TCA9539Regs TCA9539_IC3;
 extern void Pumping_Process_Stop(void *PrPtr);
-extern
+
 void FlowMeterCal(void);
-float v1, v2;
+static float v1, v2;
 _Bool ErNoPumpPulse;
 
 void QEP_CoffeeMachine_cnf(void)
@@ -89,15 +92,15 @@ void FlowMeterCal()
         }
         if (!InPumping)
             return;
-        if (eVrTimer[eVrPumpingPulse] >= 450)
+        if (eVrTimer[eVrPumpingPulse] >= 500)
         {   // 2s
             eVrTimer[eVrPumpingPulse] = 0;
             v1 = MilliLitresBuffer;
-          //  ErNoPumpPulse = (v1 <= v2) ? true : false;
+            ErNoPumpPulse = (v1 > v2) ? false : true;
             v2 = v1;
 
         }
-        else if(PWMPulseWidthGet(PWM0_BASE, PWM_OUT_2) >= 2000)
+        else if (PWMPulseWidthGet(PWM0_BASE, PWM_OUT_2) >= 2000)
             eVrTimer[eVrPumpingPulse]++;
 
     }
@@ -108,6 +111,7 @@ void InitPumpingEvent(void)
 {
     QEIPositionSet(QEI0_BASE, 0x0000);        // Initalize
     MilliLitresBuffer = 0;
+    v1 = v2 = 0;
     uint32_t status = QEIIntStatus(QEI0_BASE, true);
     QEIIntClear(QEI0_BASE, status);   // Clear any interrupt flag
     QEIIntEnable(QEI0_BASE, QEI_INTTIMER);  // Init interrupt timer out

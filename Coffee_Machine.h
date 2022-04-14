@@ -142,5 +142,12 @@ typedef enum eVrTimerList_e
     eVrSteamHeatingTimeOut,
     eVrPumpingPulse
 } eVrTimerList;
-uint32_t ti;
+
+enum CountStorage
+{
+    CupsE1, CupsE2, CupsS1, CupsS2, BladeL, BladeR, RonTimes
+};
+
+#define DataCountSaveAddress   0xA0
+
 #endif /* COFFEE_MACHINE_H_ */

@@ -21,7 +21,7 @@
 #include "driverlib/sysctl.h"
 extern void ADS1118_Coms(uint16_t config, int mode);
 
-void ADS_Read(uint16_t mode,uint16_t code)
+void ADS_Read(uint16_t mode, uint16_t code)
 {
     //volatile uint8_t DRDY = GPIOPinRead(GPIO_PORTD_BASE, GPIO_PIN_2);
 
@@ -132,27 +132,7 @@ float ADC_code2temp(int16_t code)
 
     temp = (float) code;
 
-    if (code > 0xFF6C && code <= 0xFFB5)         //-30~-15
-    {
-        temp = (float) (15 * (temp - 0xFF6C)) / 0x0049 - 30.0f;
-    }
-    else if (code > 0xFFB5 && code <= 0xFFFF)    //-15~0
-    {
-        temp = (float) (15 * (temp - 0xFFB5)) / 0x004B - 15.0f;
-    }
-    else if (code >= 0 && code <= 0x0019)         //0~5
-    {
-        temp = (float) (5 * (temp - 0)) / 0x0019;
-    }
-    else if (code > 0x0019 && code <= 0x0033)     //5~10
-    {
-        temp = (float) (5 * (temp - 0x0019)) / 0x001A + 5.0f;
-    }
-    else if (code > 0x0033 && code <= 0x0066)     //10~20
-    {
-        temp = (float) (10 * (temp - 0x0033)) / 0x0033 + 10.0f;
-    }
-    else if (code > 0x0066 && code <= 0x009A)   //20~30
+    if (code > 0x0066 && code <= 0x009A)   //20~30
     {
         temp = (float) (10 * (temp - 0x0066)) / 0x0034 + 20.0f;
     }

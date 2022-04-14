@@ -86,7 +86,7 @@ uint32_t Dmax_HotWater;
 uint8_t coefSteam_change, coefHotWater_change;
 float Steam_Temperature_Ref, Steam_Vout;
 float HotWater_Temperature_Ref, HotWater_Vout;
-float Extrude_Vout = 20;
+float Extrude_Vout = 80;
 float Gui_TempSteam, Gui_HotWaterSteam, Gui_CoffeExtractionTime, CountSteam;
 CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
 
@@ -96,18 +96,19 @@ uint16_t SumOfCupInUsed_day = 0;
 uint16_t BladeA, BladeB, Ron;
 uint32_t ExtractA, ExtractB;    //Used times of Blade and Ron
 uint32_t wBladeATimes, wBladeBTimes, wExtractionATimes, wExtractionBTimes;
+uint16_t *CountDataStorage[7];
 // Mode parameter
 Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Special_1,
         Mode_Special_2;
 Mode_Parameter_t *ModeSelected;
 
 bool cancel_cmd, test_step = 0;    // cancel command
+
 // ---------------------------------- LCD Interface -----------------------------------------
 // Reset LCD - PA6
 // Initialize and configure LCD through SPI interface
 extern void LCD_Interface_Cnf(void);   //  Configure GPIO and interface for LCD
 extern void LCD_ST7567_Init(void);     // Initial Config  LCD
-extern void LCD_Disp_Clr(uint8_t dat);
 extern void Init_SW_DMA(void);
 extern void Init_SPI_DMA(void);
 extern void Init_LCDSPI_DMA(void);
@@ -224,7 +225,7 @@ extern _Bool blinkCur;
 
 uint8_t countGrounds;
 bool InprocessStorage;
-extern volatile uint8_t step;
+//extern volatile uint8_t step;
 uint32_t duty = 100;
 
 void HomeReturn_Process_Run(void *PrPtr);
@@ -349,14 +350,12 @@ void main(int argc, char **argv)
 #ifdef VelGrindDebug
     QEP_VelGrind_Cf();
 #endif
-    // InitPumpingEvent();
     Calibration = (float) 2 / 15.0;
 //=================================================================================
 //  INITIALISATION - LCD-Display connections
 //=================================================================================
     LCD_Interface_Cnf(); // SPI & I/O configruation
     LCD_ST7567_Init();   // LCD initialize
-    // IntMasterDisable();
     // Initialize GUI interface
     SerialCommsInit();
 
@@ -371,6 +370,7 @@ void main(int argc, char **argv)
     dataSentList[Blade1NofTimesUsed] = &BladeA;
     dataSentList[Blade2NofTimesUsed] = &BladeB;
     dataSentList[RonNofTimesUsed] = &Ron;
+
     dataSentList[ExtractAtimes] = (uint16_t*) &ExtractA;
     dataSentList[ExtractBtimes] = (uint16_t*) &ExtractB;
 
@@ -423,19 +423,36 @@ void main(int argc, char **argv)
     Mode_Special_1.DirGrinding = Mode_Special_2.DirGrinding = true; // true
 
 //============================= Configure machine Parameter ========================================
+    CountDataStorage[CupsE1] = &Mode_Espresso_1.Cups;   //&SumOfCupInUsed;
+    CountDataStorage[CupsE2] = &Mode_Espresso_2.Cups;
+
+    CountDataStorage[CupsS1] = &Mode_Special_1.Cups;
+    CountDataStorage[CupsS2] = &Mode_Special_2.Cups;
+
+    CountDataStorage[BladeL] = &BladeA;
+    CountDataStorage[BladeR] = &BladeB;
+    CountDataStorage[RonTimes] = &Ron;
+
     ParameterDefaultSetting();
     AssignErrorList();
     // Read EEPROM memory
-    uint32_t tempt32DataRead[32];
 
 #ifdef SaveEeprom
+    uint32_t tempt32DataRead[32];
+    uint32_t *ui32Ptr = (uint32_t*) tempt32DataRead;
     uint8_t i = 0;
+    //----------------------------------------------------------------------------------------//
     EEPROMRead(tempt32DataRead, AddDataEeprom, 32 * 4);
     // Attract 32 bit packet to 16 bit packet and initalize to system parameter;
-    uint32_t *ui32Ptr = (uint32_t*) tempt32DataRead;
     for (i = 0; i < 32; i++)
     {
         *Pr_Packet[i] = ui32Ptr[i];
+    }
+    //----------------------------------------------------------------------------------------//
+    EEPROMRead(tempt32DataRead, DataCountSaveAddress, 8 * 4);
+    for (i = 0; i < 8; i++)
+    {
+        *CountDataStorage[i] = ui32Ptr[i];
     }
 
 #endif
@@ -464,7 +481,7 @@ void main(int argc, char **argv)
     TCA9539Init(&TCA9539_IC1);
 #endif
     // Enable Control temerature of steam and Hotwater tank
-    PWMSSR1Enable = 1;
+    PWMSSR1Enable = 0;
     PWMSSR2Enable = 1;
     PWMSSR3Enable = 1;
     //FPUDisable();
@@ -475,6 +492,9 @@ void main(int argc, char **argv)
 #if(WarmingMethod == SteamWarming)
     if (!GrindTest)
         WarmUpMachine();
+#else
+    if (!GrindTest)
+        WarmUpMachine();    // Warming up
 #endif
     while (1)
     {
@@ -708,7 +728,7 @@ void C1(void)
 
     }
 
-//-------------------------------------------- Button cancel & GUI-------------------------------
+//----------------------------------------------------------- Button cancel & GUI-------------------------------
     if ((idleMachine == 0) && (release == 1) && (cancel_cmd == 0))
     {
         if ((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) == 0)
@@ -722,7 +742,7 @@ void C1(void)
     if ((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) == 0)
         (Vr_ErrorClear > 40) ? ClearError() : Vr_ErrorClear++;
 
-//--------------------------------Release Button left Pannel-------------------------------------
+//----------------------------------------------------Release Button left Pannel-------------------------------------
     if ((TCA9539_IC1.TCA9539_Input.all & 0x78) == 0x78)
     {   // all button make coffe release
         release_mode = 1;
@@ -853,7 +873,7 @@ void D1(void)
 //================================== Detect error heating  hotwater ==========================
 
     static float f1, f2;
-    if (HeatingHotwater && (HotWater_Vout >= 50)
+    if (HeatingHotwater && (!InCleanning) && (HotWater_Vout >= 50)
             && (HotWater_Temperature_Ref - 5))
     {
         if (eVrTimer[eVrHotWaterHeatingTimeOut] >= 150)
@@ -905,11 +925,13 @@ void D1(void)
         fullOfGroundsDrawer = 1;
     if (Gui_HotWaterSteam >= 94) // Temperature of hotwater steam to extraction
         Suf_HotWater = 1;
+    else
+        Suf_HotWater = 0;
     idleMachine = !(InProcess || InStartUp || InCleanning);
     p_idleMachine = !(InProcess || InCleanning);
 #if(WarmingMethod == HeatingResWarming)
     /*
-     if (fADC_TempWarming >= 50)
+     if (temp >= 50)
      HeatingPress = 1;
      else
      HeatingPress = 0;
@@ -1038,7 +1060,7 @@ void ClearError(void)
 }
 void WatchdogIntHandler(void)
 {
-// If not feed watchdog timer , not clear interrupt and reset will occur when isr service again
+// If not feed watchdog timer , not clear interrupt then reset will occur when isr service again
     if (!feedWacthdog)
         return;
     feedWacthdog = false;

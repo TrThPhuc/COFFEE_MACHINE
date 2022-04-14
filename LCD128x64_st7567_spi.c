@@ -29,6 +29,7 @@ extern void WriteTxFiFO(uint8_t c);
 void LCD_Write_Cmd(uint8_t cmd);    // Write command to LCD
 void LCD_Write_Dat(uint8_t dat);    // Write data to LCD
 void LCD_Address_Set(uint8_t page, uint8_t column); // Set cursor
+static void LCD_Disp_Clr(uint8_t dat);
 // Display ASCII string
 void LCD_Disp_Clr(uint8_t dat);     // Clear LCD
 
@@ -62,7 +63,6 @@ void Spi0_LCD_Interface_Cnf()
 void LCD_Interface_Cnf()
 {
     Spi0_LCD_Interface_Cnf();   // Used interrupt method for transmit
-// IntEnable(INT_SSI0);
 // Configurate Pin for proper ssi
     GPIOPinTypeSSI(GPIO_PORTA_BASE,
     GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
@@ -140,8 +140,6 @@ void Disp_Str_5x8_Image(volatile uint8_t page, volatile uint8_t column,
         if ((text[i] >= 0x20) && (text[i] <= 0x7e))
         {
             j = text[i] - 0x20;
-
-            //  LCD_Address_Set(page, column);
             for (k = 0; k < 5; k++)
             {
                 Image[128 * page + (column + k)] = ascii_table_5x8[j][k];
@@ -257,11 +255,12 @@ void LCD_ST7567_Init()
     SysCtlDelay(2666666);
 
     LIGHT_ON
+    LCD_Disp_Clr(0x00);
     ;
 }
-void LCD_Disp_Clr(uint8_t dat)
+static void LCD_Disp_Clr(uint8_t dat)
 {
-    uint8_t i, j; /* so we use this, set the address at each row */
+    uint8_t i, j; /* Use this, set the address at each row */
     for (i = 0; i < 8; i++)
     {
         LCD_Write_Cmd(0xb0 | i);
