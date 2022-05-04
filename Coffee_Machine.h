@@ -55,6 +55,9 @@
 #define HighLvSensor 2.2
 #define LowLvSensor 1.1
 
+#define SensorOutlet        1
+#define NonSensorOutlet     0
+#define Outlet  NonSensorOutlet
 struct AmountofWater
 {
     uint32_t stage_1;   //  Low flow
@@ -149,5 +152,9 @@ enum CountStorage
 };
 
 #define DataCountSaveAddress   0xA0
+extern bool TestModuleTrigger;
+bool TestModuleStart;
+
+
 
 #endif /* COFFEE_MACHINE_H_ */

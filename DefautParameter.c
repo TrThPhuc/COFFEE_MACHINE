@@ -18,7 +18,8 @@ extern uint16_t PitchOfpress;
 extern _Bool Pr_PacketCopyMask[];
 extern uint32_t wBladeATimes, wBladeBTimes, wExtractionATimes,
         wExtractionBTimes;
-
+extern uint32_t wExtract_MaxTime, wExtract_MinTime;
+extern uint16_t BladeA, BladeB, Ron;
 void ParameterDefaultSetting()
 {
     // Small size
@@ -79,6 +80,12 @@ void ParameterDefaultSetting()
     wExtractionATimes = 80000;
     wExtractionBTimes = 80000;
 
+    wExtract_MaxTime = 50;
+    wExtract_MinTime = 25;
+
+    BladeA = 0;
+    BladeB = 0;
+    Ron = 0;
 }
 void AssignErrorList(void)
 {

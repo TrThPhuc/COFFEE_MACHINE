@@ -16,13 +16,15 @@
 #include "ADS1118.h"
 #include "TCA9539.h"
 #include "PID.h"
+#include "DCL_PID.h"
 
-#define Shutdown_Temp_Steam 120.0f
-#define Shutdown_Temp_HotWater 102.0f
+#define Shutdown_Temp_Steam 130.0f
+#define Shutdown_Temp_HotWater 120.0f
 
 #define PID_method
 extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
 extern CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
+extern CNTL_PID_DCL_Terminal_t HotWater_PID_DCL;
 extern void ADS1118_Cal(ADS1118_t*);
 extern float Steam_Vout, HotWater_Vout, Extrude_Vout;
 extern void Led_Display();
@@ -65,8 +67,8 @@ void Temperature_Control(void)
             if (PWMSSR1Enable)
                 CNTL_2P2Z(&Steam_CNTL);
             if (PWMSSR2Enable)
-                CNTL_2P2Z(&HotWater_CNTL);
-
+               // CNTL_2P2Z(&HotWater_CNTL);
+                CNTL_PID_DCL(&HotWater_PID_DCL);
            if (PWMSSR3Enable)
                 CNTL_Extrude();
 #endif
@@ -129,7 +131,7 @@ void Temperature_Control(void)
         TCA9539_IC3.updateOutputFlag = 1;
 
         TCA9539_IC1.ReadCmdFlag = 1;
-        TCA9539_IC2.ReadCmdFlag = 2;
+        TCA9539_IC2.ReadCmdFlag = 1;
         TCA9539_IC3.ReadCmdFlag = 1;
 
     }
@@ -138,6 +140,7 @@ void Temperature_Control(void)
 
 void LowFreqPWM(void)
 {
+    uint32_t tempduty;
     TimerIntClear(TIMER5_BASE, TIMER_TIMA_TIMEOUT);
 //---------------------------------------------SSR1 - Steam -----------------------------------------
     if (PWMSSR1Enable && !SteamMask && !Hyteresis)
@@ -175,7 +178,11 @@ void LowFreqPWM(void)
         else
         {
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4); // turn off ssr out
-            activeDuty_SRR2 = 100 - HotWater_Vout; //Shadow Update to active when counter match period
+            if(HotWater_Vout < 0)
+                tempduty  = 0;
+            else
+                tempduty = (uint16_t)HotWater_Vout;
+            activeDuty_SRR2 = 100 - tempduty; //Shadow Update to active when counter match period
             dutyCount_SSR2 = 0;
         }
 

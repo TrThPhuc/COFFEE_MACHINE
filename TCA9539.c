@@ -382,7 +382,7 @@ inline void TCA9539Regs_Write16Pin(TCA9539Regs *thisTCA, uint16_t pin,
         thisTCA->TCA9539_Onput.all = (thisTCA->TCA9539_Onput.all & (~pin));
 
 }
-inline _Bool TCA9539Regs_Read16Pin(TCA9539Regs *thisTCA, uint16_t pin)
+inline uint16_t TCA9539Regs_Read16Pin(TCA9539Regs *thisTCA, uint16_t pin)
 {
     return (thisTCA->TCA9539_Input.all & (pin));
 }

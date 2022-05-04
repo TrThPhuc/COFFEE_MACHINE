@@ -43,7 +43,7 @@
 #define Alarm_BLDC_2            0x8000
 
 // TCA9539 IC 3
-#define Valve_1                 0x10 // Valve 1
+#define Valve_1                 0x800 // Valve 10x800
 #define Alarm_BLDC_1            0x20
 #define Valve_4                 0x40
 #define Enable_BLDC1            0x80
@@ -51,10 +51,10 @@
 #define Direction_BLDC1         0x100
 #define Valve_3                 0x200 // Valve_3
 #define SpeedFeedBack_BLDC1     0x400
-#define Valve_2                 0x800 // Valve_2
+#define Valve_2                 0x10 // Valve_2
 #define LinitSwitch             0x1000
-#define LevelSensor1            0x2000
-#define LevelSensor2            0x4000
+#define OutletSensor            0x2000
+#define WarningPressMotor       0x4000
 #define Input_4                 0x8000
 
 #endif /* TCA9539_HW_MEMMAP_H_ */

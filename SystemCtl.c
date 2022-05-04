@@ -19,7 +19,7 @@
 #define mSec20  1600000
 #define mSec50  4000000
 #define mSec125 10000000
-#define mSec500 16000000
+#define mSec200 16000000
 
 #define Configure_TCA9539_IC1   0xFF30
 #define Configure_TCA9539_IC2   0x89A0
@@ -79,7 +79,7 @@ void TimerSysClt(void)
     MAP_TimerLoadSet(TIMER3_BASE, TIMER_A, mSec125);   // Temperature control
     MAP_TimerLoadSet(TIMER4_BASE, TIMER_A, mSec20);    // Timming pocess
     MAP_TimerLoadSet(TIMER5_BASE, TIMER_A, mSec5);  // PWM low freqency generate
-    MAP_TimerLoadSet(WTIMER0_BASE, TIMER_A, mSec500);
+    MAP_TimerLoadSet(WTIMER0_BASE, TIMER_A, mSec200);
 
 // Interrrupt timer configure
     TimerIntRegister(TIMER3_BASE, TIMER_A, &Temperature_Control); // Temperature control
