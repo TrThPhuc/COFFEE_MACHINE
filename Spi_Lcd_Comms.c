@@ -745,7 +745,7 @@ void Page0_Display(void)
     static bool upload;
     if (upload == 0)
     {
-        if (!HoldMsgFlag)
+        if (!HoldMsgFlag && !InProcess)
             Copy_bitExImage((void*) bitmap);
         upload = 1;
 

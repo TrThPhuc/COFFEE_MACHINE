@@ -214,15 +214,15 @@ void C2(void);
 void D1(void);
 
 #define  ModeInterpreter( _Mode,  _Led, _Id, _cbIndex)    \
-do                                              \
-{                                               \
-    ModeSelected = _Mode;                       \
-    TCA9539_IC1.TCA9539_Onput.all |= _Led;      \
-    idModeRunning = _Id;                        \
-    mode_str = true;                            \
-    release_mode = 0;                           \
-    calibWeightObj = _cbIndex;                  \
-}while(0)                                       \
+do                                                        \
+{                                                         \
+    ModeSelected = _Mode;                                 \
+    TCA9539_IC1.TCA9539_Onput.all |= _Led;                \
+    idModeRunning = _Id;                                  \
+    mode_str = true;                                      \
+    release_mode = 0;                                     \
+    calibWeightObj = _cbIndex;                            \
+}while(0)                                                 \
 
 uint16_t parameter[10] = { };
 extern void MakeCoffee(void);
@@ -240,7 +240,8 @@ extern ModuleTestMachine(void);
 
 _Bool SaveDefautCount = 0;
 extern bool clModeRinse;
-extern bool InProcess, InCleanning, InStartUp, InWarming, calibWeightFlag;
+extern bool InProcess, InCleanning, InStartUp, InWarming, calibWeightFlag,
+        calibWeightStr;
 extern bool InModuleTest;
 extern uint8_t calibWeightObj;
 bool idleMachine, p_idleMachine, fullOfGroundsDrawer, Suf_HotWater,
@@ -529,9 +530,9 @@ void main(int argc, char **argv)
     TCA9539Init(&TCA9539_IC1);
 #endif
     // Enable Control temerature of steam and Hotwater tank
-    PWMSSR1Enable = 0;
-    PWMSSR2Enable = 0;
-    PWMSSR3Enable = 0;
+    PWMSSR1Enable = 1;
+    PWMSSR2Enable = 1;
+    PWMSSR3Enable = 1;
     //FPUDisable();
 #ifdef VelGrindDebug
     InitFeedbackVel();
@@ -603,7 +604,7 @@ void D_Base(void)
 void A1(void)
 {
 // Communicate and display LCD
-    SerialHostComms();
+    SerialHostComms();  // period 3 task
     A_Group_Task = &A2;
 
 }
@@ -828,7 +829,7 @@ void C1(void)
     }
     else
         Vrtimer++;
-    if ((Vrtimer > 25) && (calibWeightFlag == 0))
+    if ((Vrtimer > 25) && (calibWeightFlag == 0) && HomePage)
     {
         calibWeightFlag = 1;
         Vrtimer = 0;
@@ -1015,10 +1016,10 @@ void D1(void)
 #ifndef debug
     if (countGrounds >= 50)
         fullOfGroundsDrawer = 1;
-    /*    if (Gui_HotWaterSteam >= 94 && !ErHotWater) // Temperature of hotwater steam to extraction
-     Suf_HotWater = 1;
-     else
-     Suf_HotWater = 0;*/
+    if (Gui_HotWaterSteam >= 94 && !ErHotWater) // Temperature of hotwater steam to extraction
+        Suf_HotWater = 1;
+    else
+        Suf_HotWater = 0;
     idleMachine = !(InProcess || InStartUp || InCleanning || InLevelPumping);
     p_idleMachine = !(InProcess || InCleanning);
 #if(WarmingMethod == HeatingResWarming)

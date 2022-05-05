@@ -78,6 +78,8 @@ uint32_t VrTimer_Grinding, VrTimer_Compress, VrTimer_Delay, VrTimer_Pumping,
 _Bool holdShaftMotor, StuckGrindPosError;
 float VrTimer_Compensate;
 _Bool update;
+uint16_t VrShaftRelease;
+_Bool TriggerShaftRelease = false;
 void MakeCoffee();
 void CheckingFinish_StepInRuning();
 void MakeCoffeProcess(void);
@@ -264,6 +266,7 @@ void Compress_Process_Run(void *PrPtr)
     {
         uint8_t Stage_Compress;
         CompressTriger = 0;
+        holdShaftMotor = true;
         // Set direction
         TCA9539Regs_Write16Pin(&TCA9539_IC2, Direction_BLDC2, dirCompress_M2);
         TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, false); // low acitve (Enable)
@@ -308,11 +311,11 @@ void Compress_Process_Stop(void *PrPtr)
         uint16_t tempread = TCA9539Regs_Read16Pin(&TCA9539_IC3,
         WarningPressMotor);
 
-        if (M_Step == M_PosCompress || M_Step == M_ExtractCoffee) // PosCompress(after extraction) vs extra compress
-        {
-            TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true); // Disable/ connect to gnd - Times 2 for reset warning if fault
-            TCA9539_IC2.updateOutputFlag = 1;
-        }
+        /*        if (M_Step == M_PosCompress || M_Step == M_ExtractCoffee) // PosCompress(after extraction) vs extra compress
+         {
+         TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true); // Disable/ connect to gnd - Times 2 for reset warning if fault
+         TCA9539_IC2.updateOutputFlag = 1;
+         }*/
     }
 
 }
@@ -339,7 +342,7 @@ void Pumping_Process_Run(void *PrPtr)
         }
         else    // Cleanning Process
         {
-            TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1 | Valve_3, true); // Open valve 1
+            TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, true); // Open valve 1
             SetVolume = CleanVolume;
             SpeedDuty_Pump = CleanPressure_Pump;
             if (Cl_Step == Cl_Pumping1)
@@ -367,8 +370,8 @@ void Pumping_Process_Run(void *PrPtr)
 
         // Disable motor compress to reset if fault codition in Pre-compress
         // Disable  driver compress - connect to gnd // Enable motor Pump
-        if (TCA9539Regs_Read16Pin(&TCA9539_IC3, WarningPressMotor) == 0)
-            TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true);
+        /*        if (TCA9539Regs_Read16Pin(&TCA9539_IC3, WarningPressMotor) == 0)
+         TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true);*/
         TCA9539_IC2.updateOutputFlag = true;
         Detect = MilliLitresBuffer = 0;
 
@@ -386,11 +389,11 @@ void Pumping_Process_Stop(void *PrPtr)
         PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
         uint16_t tempread = TCA9539Regs_Read16Pin(&TCA9539_IC3,
         WarningPressMotor);
-        if (tempread == 0) // PosCompress(after extraction) vs extra compress
-        {
-            TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true); // Disable/ connect to gnd - Times 2 for reset warning if fault
-            TCA9539_IC2.updateOutputFlag = 1;
-        }
+        /*        if (tempread == 0) // PosCompress(after extraction) vs extra compress
+         {
+         TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true); // Disable/ connect to gnd - Times 2 for reset warning if fault
+         TCA9539_IC2.updateOutputFlag = 1;
+         }*/
         FinishPumpEvent = true;
 
     }
@@ -500,7 +503,7 @@ void TimmingPorcess()
 
     }
 //-------------------------------------Hold compress ---------------------------------------------
-    if (InCompress)
+    if (InCompress || InPumping || InHomeReturn)
         ReleaseErrorMotor();
 
 //---------------------------------------------------- Timming delay fuction---------------------------------------------------
@@ -540,6 +543,7 @@ void TimmingPorcess()
 #else
             TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, false);
             TCA9539_IC3.updateOutputFlag = 1;
+            InRelay_Timming = 0;
 #endif
         }
         return;
@@ -1230,7 +1234,7 @@ void MakeCoffeProcess(void)
                 }
                 // Delay in Precompress and after grind
                 (M_Step == M_ExtractPos || M_Step == M_GrindPos) ?
-                        (Delay_20ms(50)) : (Delay_20ms(25));
+                        (Delay_20ms(50)) : (Delay_20ms(0));
                 M_Step++;
             }
             break;
@@ -1382,7 +1386,7 @@ void WarmUpProcess()
             if (!delay_flag)
             {
                 InStartUp = cancel_cmd = 0;
-                Extrude_Vout = 90;
+                Extrude_Vout = 80;
                 Wm_Step = Wm_TurnOnHeating;
                 HeatingPress = 1;
                 TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
@@ -1660,7 +1664,7 @@ void CleanProcess()
             goto Cl_compresscmd;
         case Cl_CompressPos2:
             speedstep = 9000; //12000
-            stepPos2 = 6000;
+            stepPos2 = 6100;
             PosStep_Compress = stepPos2; // stepPos3
             Ron++;
             Cl_compresscmd: if (clModeRinse)
@@ -1742,8 +1746,8 @@ void CleanProcess()
             }
             break;
         case Cl_FinishCLean:
-
             InCleanning = cancel_cmd = 0;
+            clModeRinse = 0;
             Cl_Step = Cl_ReturnHome1;
             TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
             QEIIntDisable(QEI0_BASE, QEI_INTTIMER);
@@ -1773,14 +1777,14 @@ inline void SweptErrorInRunning(void)
 {
     static uint8_t trigger, vr_ReleaseDelay = 0;
     _Bool errorForceCancel = ErNoPumpPulse || ErOutletDetect;
-    if (ErHomeReturn && (ErHomeStr == 0))
+/*    if (ErHomeReturn && (ErHomeStr == 0))
     {
         TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true);
         (vr_ReleaseDelay > 10) ?
                 (TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, false), ErHomeStr =
                         1, vr_ReleaseDelay = 0) :
                 (vr_ReleaseDelay++);
-    }
+    }*/
     if (!errorForceCancel)
         trigger = 0;
     if (errorForceCancel & trigger == 0)
@@ -1867,27 +1871,40 @@ void CheckFinsih_ModuleTest(void)
 }
 inline void ReleaseErrorMotor(void)
 {
-    static uint16_t VrRelease;
-    static _Bool TriggerRelease = false;
-
+    static uint8_t stage = 0;
     if (!holdShaftMotor)
         return;
     uint16_t error = TCA9539Regs_Read16Pin(&TCA9539_IC3, WarningPressMotor);
-    if ((error == 0) && (TriggerRelease == 0))
+    if ((error == 0) && (TriggerShaftRelease == 0))
     {
-        TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, false); //  Disable motor
-        TriggerRelease = true;
-        VrRelease = 0;
-        if (M_Step == M_GrindPos || (Cl_Step == Cl_CompressPos1) || clModeRinse)
+        TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true); //  Disable motor
+        TCA9539_IC2.updateOutputFlag = true;
+        TriggerShaftRelease = true;
+        VrShaftRelease = 0;
+        if (M_Step == M_GrindPos || (Cl_Step == Cl_CompressPos1))
             StuckGrindPosError = true;
 
     }
-    if (!TriggerRelease)
+    if (!TriggerShaftRelease)
         return;
-    (VrRelease >= 20) ?
-            (TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true), TriggerRelease = //  Enable motor
-                    false) :
-            (VrRelease++);
+    if (VrShaftRelease >= 25)
+    {
+        switch (stage)
+        {
+        case 0:
+            TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, false);
+            TCA9539_IC2.updateOutputFlag = true;
+            VrShaftRelease = 0;
+            stage = 1;
+            break;
+        case 1:
+            stage = 0;
+            TriggerShaftRelease = false;
+            break;
+        }
+    }
+    else
+        VrShaftRelease++;
 
 }
 void ModuleTest(void)

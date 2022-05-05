@@ -58,7 +58,7 @@ StepInWarmingProcess Wm_Step;
 #define dirReturnHome_M2 false
 
 uint32_t pos1 = 118, pos2 = 149;  // position for compress process
-uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 1000, stepPos4 = 80,
+uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 800, stepPos4 = 80,
         stepPos5 = 600;
 // unit X (mm) * 100 = stepPos
 
@@ -67,11 +67,11 @@ uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 1000, stepPos4 = 80,
 uint8_t t1 = 200, t2 = 10;     // for test pre-infusion
 
 // Grinding process
-uint32_t PWMIncrement = 200;   // Ram speed grinding motor
+uint32_t PWMIncrement = 50;   // Ram speed grinding motor
 float K_VrTimer_Grinding = 25.0; //21.28
 uint32_t speedTemp, defaulSpeed = 11000;
 // Pumping process
-#define PreInfusion_pump    0.25     // 1000
+#define PreInfusion_pump    0.35     // 1000
 #define HighPressure_Pump   0.99    // 5000
 #define CleanPressure_Pump  0.99
 
