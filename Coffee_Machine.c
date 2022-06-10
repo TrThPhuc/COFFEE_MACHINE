@@ -87,7 +87,7 @@ uint32_t Dmax_HotWater;
 uint8_t coefSteam_change, coefHotWater_change;
 float Steam_Temperature_Ref, Steam_Vout;
 float HotWater_Temperature_Ref, HotWater_Vout;
-float Extrude_Vout = 60;
+float Extrude_Vout = 40;
 float Gui_TempSteam, Gui_HotWaterSteam, Gui_CoffeExtractionTime, CountSteam;
 extern _Bool ErHotWater;
 CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
@@ -107,6 +107,7 @@ Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Special_1,
 Mode_Parameter_t *ModeSelected;
 
 bool cancel_cmd, test_step = 0;    // cancel command
+extern bool MaskExtraCompress;
 // ---------------------------------- LCD Interface -----------------------------------------
 // Reset LCD - PA6
 // Initialize and configure LCD through SPI interface
@@ -137,7 +138,8 @@ ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
 extern void SSI1_IntHandler(void);
 void ADS1118_Cal(ADS1118_t *ADS); // Calculate temperature
-extern float temp;
+extern float Group_Temp;
+uint32_t wGroupDuty, wGroupShutdownDuty;
 volatile uint8_t datacount = 0;
 uint32_t datas, fb_config;
 #define MEM_BUFFER_SIZE         2
@@ -213,16 +215,17 @@ void C2(void);
 
 void D1(void);
 
-#define  ModeInterpreter( _Mode,  _Led, _Id, _cbIndex)    \
-do                                                        \
-{                                                         \
-    ModeSelected = _Mode;                                 \
-    TCA9539_IC1.TCA9539_Onput.all |= _Led;                \
-    idModeRunning = _Id;                                  \
-    mode_str = true;                                      \
-    release_mode = 0;                                     \
-    calibWeightObj = _cbIndex;                            \
-}while(0)                                                 \
+#define  ModeInterpreter( _Mode,  _Led, _Id, _cbIndex, _maskCompress)    \
+do                                                                       \
+{                                                                        \
+    ModeSelected = _Mode;                                                \
+    TCA9539_IC1.TCA9539_Onput.all |= _Led;                               \
+    idModeRunning = _Id;                                                 \
+    mode_str = true;                                                     \
+    release_mode = 0;                                                    \
+    calibWeightObj = _cbIndex;                                           \
+    MaskExtraCompress =  _maskCompress;                                  \
+}while(0)
 
 uint16_t parameter[10] = { };
 extern void MakeCoffee(void);
@@ -233,6 +236,10 @@ extern void MakeCoffeProcess(void);
 
 extern void CleanningMachine(void);
 extern void CleanProcess(void);
+
+extern void WarmingPressMachine(void);
+extern void WarmingPressProcess(void);
+
 extern inline void HoldMotorOff(void);
 extern void CheckFinsih_ModuleTest(void);
 extern void SaveCountToEeprom(void);
@@ -421,6 +428,7 @@ void main(int argc, char **argv)
     dataSentList[SeriNumber] = (uint16_t*) &SeriNum;
     dataSentList[Model] = (uint16_t*) &ModelName;
     dataSentList[ProductDate] = (uint16_t*) &ProductDateStr;
+    dataSentList[GroupTemp] = (uint16_t*) &Group_Temp;
 
     //"Set" variables
 //===================================================================================
@@ -456,6 +464,8 @@ void main(int argc, char **argv)
     Pr_Packet[22] = &wExtractionBTimes;
     Pr_Packet[5] = &wExtract_MaxTime;
     Pr_Packet[6] = &wExtract_MinTime;
+    Pr_Packet[13] = &wGroupDuty;
+    Pr_Packet[14] = &wGroupShutdownDuty;
 
     // Assign direction motor of grind module
 
@@ -691,9 +701,10 @@ static inline uint32_t ScanTaskMachine(void)
         return ((uint32_t) &WarmUpProcess);
     if (InModuleTest)
         return ((uint32_t) &CheckFinsih_ModuleTest);
+    if (InWarming)
+        return ((uint32_t) &WarmingPressProcess);
     return ((uint32_t) &B2);
 }
-
 // Task 50ms - Button GUI
 void C1(void)
 {
@@ -706,7 +717,8 @@ void C1(void)
 
 // --------------------------------------------------------------------------------------//
 
-    static uint8_t release_mode = 1, release = 0, release_CleanB = 1;
+    static uint8_t release_mode = 1, release = 0, release_CleanB = 1,
+            release_WarmingB = 1;
     static _Bool mode_str;
     static uint32_t Vrtimer;
 
@@ -716,49 +728,42 @@ void C1(void)
     {
         if ((TCA9539_IC1.TCA9539_Input.all & Special1_Bt) == 0)
         {
-            /*           ModeSelected = &Mode_Special_1;
-             //TCA9539_IC1.TCA9539_Onput.all &= LED_BT5;
-             led_Select = LED_BT5;
-             idModeRunning = 7;
-             mode_str = true;        // Push Mode_button coffee
-             calibWeightObj = 18;    // Index in Pr_packet
-             release_mode = 0;*/
-            ModeInterpreter(&Mode_Special_1, LED_BT5, 7, 18);
+            ModeInterpreter(&Mode_Special_1, LED_BT5, 7, 18, false);
 
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Special2_Bt) == 0)
         {
-            /*            ModeSelected = &Mode_Special_2;
-             // TCA9539_IC1.TCA9539_Onput.all &= LED_BT7;
-             led_Select = LED_BT7;
-             idModeRunning = 8;
-             mode_str = true;        // Push Mode_button coffee
-             calibWeightObj = 26;    // Index in Pr_packet
-             release_mode = 0;*/
-            ModeInterpreter(&Mode_Special_2, LED_BT7, 8, 26);
+
+            ModeInterpreter(&Mode_Special_2, LED_BT7, 8, 26, true);
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso1_Bt) == 0)
         {
-            /*            ModeSelected = &Mode_Espresso_1;
-             //TCA9539_IC1.TCA9539_Onput.all &= LED_BT4;
-             led_Select = LED_BT4;
-             idModeRunning = 5;
-             mode_str = true;        // Push Mode_button coffee
-             calibWeightObj = 2;     // Index in Pr_packet
-             release_mode = 0;*/
-            ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, 2);
+
+            ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, 2, false);
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso2_Bt) == 0)
         {
-            /*            ModeSelected = &Mode_Espresso_2;
-             //TCA9539_IC1.TCA9539_Onput.all &= LED_BT6;
-             led_Select = LED_BT6;
-             idModeRunning = 6;
-             calibWeightObj = 10;    // Index in Pr_packet
-             mode_str = true;        // Push Mode_button coffee
-             release_mode = 0;*/
-            ModeInterpreter(&Mode_Espresso_2, LED_BT6, 6, 10);
+            ModeInterpreter(&Mode_Espresso_2, LED_BT6, 6, 10, true);
         }
+        /*        uint16_t moderead = TCA9539Regs_Read16Pin(&TCA9539_IC1,
+         Special1_Bt | Special2_Bt | Expresso1_Bt | Expresso2_Bt);
+         switch (moderead)
+         {
+         case Special1_Bt:
+         ModeInterpreter(&Mode_Special_1, LED_BT5, 7, 18);
+         break;
+         case Special2_Bt:
+         ModeInterpreter(&Mode_Special_2, LED_BT7, 8, 26);
+         break;
+         case Expresso1_Bt:
+         ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, 2);
+         break;
+         case Expresso2_Bt:
+         ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, 2);
+         break;
+         default:
+         break;
+         }*/
 
     }
     // If push and release Mode_button will make coffee
@@ -781,7 +786,7 @@ void C1(void)
     if ((release_CleanB == 1) && (EnMakeCoffee == 1))
     {
         // Cleanning complete machine
-        if ((TCA9539_IC1.TCA9539_Input.all & BT9) == 0)
+        if ((TCA9539_IC1.TCA9539_Input.all & Clean_Bt) == 0)
         {
             TCA9539_IC1.TCA9539_Onput.all |= LED_BT9;
             idModeRunning = 2;
@@ -791,7 +796,7 @@ void C1(void)
 
         }
         // Rinse
-        if ((TCA9539_IC1.TCA9539_Input.all & BT11) == 0)
+        if ((TCA9539_IC1.TCA9539_Input.all & Rinse_Bt) == 0)
         {
             idModeRunning = 1;
             CleanningMachine();
@@ -800,7 +805,6 @@ void C1(void)
         }
 
     }
-
 //----------------------------------------------------------- Button cancel & GUI-------------------------------
     if ((idleMachine == 0) && (release == 1) && (cancel_cmd == 0))
     {
@@ -814,6 +818,16 @@ void C1(void)
     }
     if ((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) == 0)
         (Vr_ErrorClear > 40) ? ClearError() : Vr_ErrorClear++;
+//-------------------------------------- Warming ---------------------------------------------
+    if (release_WarmingB == 1 && (EnMakeCoffee == 1))
+    {
+        if (TCA9539Regs_Read16Pin(&TCA9539_IC2, Warming_Bt) == 0)
+        {
+            release_WarmingB = 0;
+            WarmingPressMachine();
+
+        }
+    }
 
 //----------------------------------------------------Release Button left Pannel-------------------------------------
     if ((TCA9539_IC1.TCA9539_Input.all & 0x78) == 0x78)
@@ -844,13 +858,16 @@ void C1(void)
         TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT8 | LED_BT9);
     }
     // Button clean release
-    if (((TCA9539_IC1.TCA9539_Input.all & (BT9 | BT11)) != 0x84)
-            && (InCleanning == 0))        // Button cancel release
+    if (((TCA9539_IC1.TCA9539_Input.all & (Clean_Bt | Rinse_Bt)) != 0x84)
+            && (InCleanning == 0))            // Button cancel release
     {
         release_CleanB = 1;
         TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT8 | LED_BT9);
     }
-
+    if (TCA9539Regs_Read16Pin(&TCA9539_IC2, Warming_Bt) != 0)
+    {
+        release_WarmingB = 1;
+    }
     C_Group_Task = &C2;
 }
 // Task 50ms - Control level
@@ -883,7 +900,7 @@ void C2(void)
         if (InLevelPumping == 1)
         {
             Cmd_WriteMsg(SteamLevelControl_Stop, NULL);
-            TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_3, true);
+            TCA9539Regs_Write16Pin(&TCA9539_IC2, Valve_5, true);
             PumpStr = true;
             VrRelease = 0;
         }
@@ -891,10 +908,10 @@ void C2(void)
     }
     if (PumpStr)
     {
-        (VrRelease >= 12) ?
-                (PumpStr = 0, TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_3,
-                false)) :
-                (VrRelease++);
+        (VrRelease >= 12) ? (PumpStr = 0, TCA9539Regs_Write16Pin(&TCA9539_IC2,
+        Valve_5,
+                                                                 false)) :
+                            (VrRelease++);
     }
     if ((fADC_LevelSensor >= (float) 0.85) && (fADC_LevelSensor <= (float) 2.2))
     {
@@ -945,9 +962,10 @@ void D1(void)
 //================================== Hold motor off when not used ================================
     HoldMotorOff();
 //================================== Blink Error ==================================================
-    ((blinkCurVr >= 2) || (ObjSelectFlag == 0)) ?
-            (blinkCurVr = 0, blinkCur = true) :
-            (blinkCur = false, blinkCurVr++);
+    ((blinkCurVr >= 2) || (ObjSelectFlag == 0)) ? (blinkCurVr = 0, blinkCur =
+    true) :
+                                                  (blinkCur =
+                                                  false, blinkCurVr++);
 
 // Detect Coffee out error
 #if(Outlet == SensorOutlet)
@@ -1020,7 +1038,8 @@ void D1(void)
         Suf_HotWater = 1;
     else
         Suf_HotWater = 0;
-    idleMachine = !(InProcess || InStartUp || InCleanning || InLevelPumping);
+    idleMachine = !(InProcess || InStartUp || InCleanning || InLevelPumping
+            || InWarming);
     p_idleMachine = !(InProcess || InCleanning);
 #if(WarmingMethod == HeatingResWarming)
     /*
@@ -1174,7 +1193,7 @@ void WatchdogInit(void)
     {
         MAP_WatchdogUnlock(WATCHDOG0_BASE);
     }
-    MAP_WatchdogReloadSet(WATCHDOG0_BASE, MAP_SysCtlClockGet());    // 1s
+    MAP_WatchdogReloadSet(WATCHDOG0_BASE, MAP_SysCtlClockGet()); // 1s
     WatchdogIntRegister(WATCHDOG0_BASE, &WatchdogIntHandler);
 #ifdef STALLWD
     MAP_WatchdogStallEnable(WATCHDOG0_BASE); // Stall watchdog timer when cpu stall use for debug

@@ -39,6 +39,18 @@ typedef enum
     Cl_FinishCLean,
 } StepInCleanningProcess;
 StepInCleanningProcess Cl_Step;
+
+typedef enum
+{
+    Wa_ReturnHome1,
+    Wa_CompressPos1,
+    Wa_WarmingBrew,
+    Wa_CompressPos2,
+    Wa_ReturnHome2,
+    Wa_FinishWarm
+}StepInWarmingBrewProcess;
+StepInWarmingBrewProcess Wa_Step;
+
 typedef enum
 {
     Wm_TurnOnHeating, Wm_finish
@@ -56,10 +68,16 @@ StepInWarmingProcess Wm_Step;
 
 #define dirCompress_M2 true
 #define dirReturnHome_M2 false
+#define ReleasePressure 1
 
+// stepPos1 - grindpos
+// stepPos2 - pre-extract
+// stepPos3 - remove grounds
+// stepPos4 - pos-compress
+// stepPos5 - pos-extraction
 uint32_t pos1 = 118, pos2 = 149;  // position for compress process
 uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 800, stepPos4 = 80,
-        stepPos5 = 600;
+        stepPos5 = 100; // Extract Pos  //600
 // unit X (mm) * 100 = stepPos
 
 //175 210
@@ -71,7 +89,7 @@ uint32_t PWMIncrement = 50;   // Ram speed grinding motor
 float K_VrTimer_Grinding = 25.0; //21.28
 uint32_t speedTemp, defaulSpeed = 11000;
 // Pumping process
-#define PreInfusion_pump    0.35     // 1000
+#define PreInfusion_pump    0.28     // 1000
 #define HighPressure_Pump   0.99    // 5000
 #define CleanPressure_Pump  0.99
 
@@ -94,7 +112,7 @@ uint32_t sp3 = 3400;
 #define k1 0.35
 #define k2 0.5
 #define k3 1
-float infu = 0.75, infu_cl = 60;
+float infu = 2, infu_cl = 60;
 uint32_t speedstep = 12000;
 uint32_t ppo;
 float ppi = 0;
@@ -109,6 +127,7 @@ uint8_t TargetTest;
 float  speedPumpTest;
 bool dirGrindTest, InModuleTest, TestModuleTrigger;
 
+#define PosExtract 1
 
 void ModuleTest(void);
 void CheckFinsih_ModuleTest(void);

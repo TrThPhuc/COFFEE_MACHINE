@@ -97,8 +97,8 @@ enum GuiParamter
     tempExtrude,
     PulseCount,
     ExtractAtimes,
-    ExtractBtimes
-
+    ExtractBtimes,
+    GroupTemp,
 };
 
 enum errorlist

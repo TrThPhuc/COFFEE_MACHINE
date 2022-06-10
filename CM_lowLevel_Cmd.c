@@ -70,8 +70,10 @@ extern bool cancel_cmd, test_step; // Cancel button
 static bool cancel_storage;
 
 #define NumOfStepClean 9
-
+#define NumOfStepWarm 6
 enum status step_statusClean[NumOfStepClean];
+enum status step_statusWarm[NumOfStepWarm];
+
 // Virtual timer for running process
 uint32_t VrTimer_Grinding, VrTimer_Compress, VrTimer_Delay, VrTimer_Pumping,
         VrTimer_Relay;
@@ -90,6 +92,8 @@ inline void eVrTimerReset(void);
 void SaveCountToEeprom(void);
 inline void ReleaseErrorMotor(void);
 extern uint16_t BladeA, BladeB, Ron;
+
+volatile bool InPending;
 //------------------------------------- Process - Grinding coffee into powder-----------------------------------
 
 volatile bool GrindingTriger, InGrinding;
@@ -110,6 +114,8 @@ inline void RampSpeed();
 inline void ExtraCompress();
 bool clModeRinse;
 extern float Extrude_Vout;
+uint8_t extractPostimes;
+_Bool postimesFlag;
 //--------------------------------------------- Process - Pumping Hot water -----------------------------------------
 volatile bool PumpingTriger, InPumping;
 extern volatile bool FinishPumpEvent;
@@ -130,6 +136,8 @@ uint8_t timesH = 0;
 //---------------------------------------------Process - Insert POD--------------------------------------------------
 volatile bool InsertPodTrigger, InInsertPod;
 bool PodInsertedFlag;
+bool MaskExtraCompress;
+bool WarmingFlag;
 //--------------------------------------- Control Level water in steam tank -----------------------------------------
 volatile bool LevelControlTriger, InLevelPumping, Hyteresis;
 bool SteamReady;
@@ -337,12 +345,14 @@ void Pumping_Process_Run(void *PrPtr)
             TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, true); // Open valve 1
             SpeedDuty_Pump = PreInfusion_pump; // Speed motor pumping in preinfusion stage
             SetVolume = volume;
-            VrTimer_FlagRelay = Mode->PreInfusion / UnitTimer; // Time for preinfusion
+            VrTimer_FlagRelay = (Mode->PreInfusion - infu) / UnitTimer; // Time for preinfusion
+            TCA9539Regs_Write16Pin(&TCA9539_IC2, Valve_5, false);
             flagdelay = 1;  // Used for stage pumping fuction
         }
         else    // Cleanning Process
         {
             TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, true); // Open valve 1
+
             SetVolume = CleanVolume;
             SpeedDuty_Pump = CleanPressure_Pump;
             if (Cl_Step == Cl_Pumping1)
@@ -405,7 +415,7 @@ void SteamLevelControl_Run(void *PrPtr)
     if (InLevelPumping && LevelControlTriger)
     {
         LevelControlTriger = 0;
-        TCA9539Regs_Write16Pin(&TCA9539_IC2, Valve_5 | Valve_4, true);
+        TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_4, true);
         uint32_t countDuty = (uint32_t) (0.5
                 * PWMGenPeriodGet(PWM0_BASE, PWM_GEN_1));
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, countDuty);
@@ -421,7 +431,7 @@ void SteamLevelControl_Stop(void *PrPtr)
         InLevelPumping = 0;
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
         PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
-        TCA9539Regs_Write16Pin(&TCA9539_IC2, Valve_5 | Valve_4, false);
+        TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_4, false);
         TCA9539_IC2.updateOutputFlag = 1;
 
     }
@@ -503,7 +513,7 @@ void TimmingPorcess()
 
     }
 //-------------------------------------Hold compress ---------------------------------------------
-    if (InCompress || InPumping || InHomeReturn)
+    if (InPumping || InHomeReturn)
         ReleaseErrorMotor();
 
 //---------------------------------------------------- Timming delay fuction---------------------------------------------------
@@ -525,20 +535,16 @@ void TimmingPorcess()
             {
             case 0:
 
-                VrTimer_Relay = 75; // 1s
+                VrTimer_Relay = 50; // 1sinfu
                 // Release pressure
-                TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_3, true);
-                Step_Relay++;
-                break;
-            case 1:
-                VrTimer_Relay = 50; // 1s
+                TCA9539Regs_Write16Pin(&TCA9539_IC2, Valve_5, true);
                 TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, false);
                 Step_Relay++;
                 break;
-            case 2:
+            case 1:
+                TCA9539Regs_Write16Pin(&TCA9539_IC2, Valve_5, false);
                 InRelay_Timming = 0;
                 break;
-
             }
 #else
             TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, false);
@@ -562,10 +568,13 @@ void TimmingPorcess()
             switch (Step_Pump)
             {
             case 0: // Preinfustion extraction stage -
-
-                VrTimer_FlagRelay = infu / UnitTimer; // 2s
-                // Move to final compress pos in full extraction
-                ExtraCompress();
+                if (!MaskExtraCompress)
+                {
+                    VrTimer_FlagRelay = infu / UnitTimer; // 2s
+                    //PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
+                    // Move to final compress pos in full extraction
+                    //ExtraCompress();
+                }
 #if(M_Build == 1)
                  PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
                  TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, false);
@@ -597,6 +606,7 @@ void TimmingPorcess()
                 PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, SpeedDuty_Pump / 16);
 #endif//
                 PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
+                triggerCount_ExtractionTime = 1;
                 Step_Pump++;
                 flagdelay = 0;
                 break;
@@ -700,8 +710,11 @@ void TimmingPorcess()
                 // close valve 2
             case 10:
                 TCA9539Regs_Write16Pin(&TCA9539_IC3,
-                Valve_1 | Valve_2 | Valve_3,
+                Valve_1 | Valve_3,
                                        false);
+                TCA9539Regs_Write16Pin(&TCA9539_IC3,
+                Valve_2,
+                                       true);
                 flagdelay_Cl = Step_Pump_Cl = 0;
                 Pumping_Process_Stop(Null);
                 break;
@@ -938,8 +951,8 @@ void MakeCoffee()
         M_Step = M_ReturnHome1;
     else
         M_Step = M_GrindingCoffee;
-    Gui_CoffeExtractionTime = 0;
-    InWarming = delay_flag = ppi = 0;
+    Gui_CoffeExtractionTime = extractPostimes = 0;
+    InWarming = delay_flag = ppi = postimesFlag = 0;
 #if(WarmingMethod == SteamWarming)
     if (calibWeightFlag)
         TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
@@ -1200,7 +1213,9 @@ void MakeCoffeProcess(void)
             LookUpCompressTime();
             Pos_Compress = 110; // Mask error
             Ron++;
-            PosStep_Compress = stepPos2;
+            (!postimesFlag) ?
+                    (PosStep_Compress = stepPos2) : ((PosStep_Compress =
+                            stepPos5));
             speedstep = 9000;
 
             goto compresscmd;
@@ -1218,6 +1233,7 @@ void MakeCoffeProcess(void)
 
                 step_status[M_Step] = St_Running;
                 InCompress = CompressTriger = 1;
+
                 Cmd_WriteMsg(&Compress_Process_Run, (void*) &Pos_Compress);
 
             }
@@ -1233,8 +1249,20 @@ void MakeCoffeProcess(void)
                     break;
                 }
                 // Delay in Precompress and after grind
-                (M_Step == M_ExtractPos || M_Step == M_GrindPos) ?
-                        (Delay_20ms(50)) : (Delay_20ms(0));
+
+                if (M_Step == M_ExtractPos)
+                {
+                    /*                    if (extractPostimes < 1)
+                     {
+                     postimesFlag = true;
+                     extractPostimes++;
+                     break;
+                     }*/
+                    TCA9539Regs_Write16Pin(&TCA9539_IC2, Valve_5, true);
+                    Delay_20ms(50);
+                }
+                if (M_Step == M_GrindPos)
+                    Delay_20ms(50);
                 M_Step++;
             }
             break;
@@ -1244,7 +1272,7 @@ void MakeCoffeProcess(void)
                 step_status[M_Step] = St_Running;
                 InPumping = PumpingTriger = 1;
                 Cmd_WriteMsg(&Pumping_Process_Run, (void*) ModeSelected);
-                triggerCount_ExtractionTime = 1;
+                // triggerCount_ExtractionTime = 1;
                 CoffeeExtractionTime = timesH = 0;
             }
             if (InPumping)
@@ -1386,7 +1414,7 @@ void WarmUpProcess()
             if (!delay_flag)
             {
                 InStartUp = cancel_cmd = 0;
-                Extrude_Vout = 80;
+                Extrude_Vout = 50;
                 Wm_Step = Wm_TurnOnHeating;
                 HeatingPress = 1;
                 TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
@@ -1400,46 +1428,147 @@ void WarmUpProcess()
     B_Group_Task = &B2;
 
 }
-#if(WarmingMethod == SteamWarming)
+
 void WarmingPressMachine(void *P)
 {
-    if (WarmingEnalbe)
-    {
-        InWarming = 1;
-        stepWarming = 0;
-        TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
-        TimerIntEnable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
-    }
+    uint8_t i;
+    InWarming = true;
+    WarmingFlag = false;
+    Wa_Step = Wa_ReturnHome1;
+    for (i = 0; i < NumOfStepWarm; i++)
+        step_statusWarm[i] = St_Pending;
+    TimerIntClear(TIMER4_BASE, TIMER_TIMA_TIMEOUT); // Interrupt timer
+    TimerIntEnable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
 }
-void WarmingPressProcess(void)
+void CheckFinish_Warming(void)
 {
-    static uint32_t stepWarming;
-    if (InWarming && SteamReady)
+    if (InWarming)
     {
-        switch (stepWarming)
+        switch (Wa_Step)
         {
-        case 0:
-            /*            TCA9539_IC3.TCA9539_Onput.all = ((TCA9539_IC3.TCA9539_Onput.all
-             & ~(Valve_4)) | Valve_4);*/
-            TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_4, true);
-            Delay_20ms(500);
-            stepWarming++;
-            break;
-        case 1:
-            if (!delay_flag)
+        case Wa_ReturnHome1:
+        case Wa_ReturnHome2:
+            RampSpeed();
+            if ((TCA9539_IC3.TCA9539_Input.all & LinitSwitch) == 0)
             {
-                InWarming = stepWarming = 0;
-                /*                TCA9539_IC3.TCA9539_Onput.all = (TCA9539_IC3.TCA9539_Onput.all
-                 & ~(Valve_4));*/
-                TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_4, false);
-                TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
+                Cmd_WriteMsg(&HomeReturn_Process_Stop, Null);
+                step_statusWarm[Wa_Step] = St_Finish;
             }
-
+            break;
+        case Wa_CompressPos1:
+        case Wa_CompressPos2:
+            RampSpeed();
+            if ((VrTimer_Compress == 0) && InCompress)
+                step_statusWarm[Wa_Step] = St_Finish;
+            break;
+        case Wa_WarmingBrew:
+            if (cancel_cmd)
+            {
+                step_statusWarm[Wa_Step] = St_Finish;
+                TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, false);
+                Delay_20ms(50);
+            }
+            break;
         }
     }
     B_Group_Task = &B2;
 }
-#endif
+void WarmingPressProcess(void)
+{
+    if (InWarming)
+    {
+        switch (Wa_Step)
+        {
+
+        case Wa_ReturnHome1:
+        case Wa_ReturnHome2:
+            if ((!InHomeReturn) && (!delay_flag))
+            {
+                HomeReturnTriger = InHomeReturn = 1;
+                if (HomePeding != 0)
+                {
+                    speedstep = 7500; // 10000
+                    Cmd_WriteMsg(&HomeReturn_Process_Run, Null);
+                }
+            }
+
+            if ((InHomeReturn) && (step_statusWarm[Wa_Step] == St_Finish))
+            {
+                InHomeReturn = 0;
+                Wa_Step++;
+            }
+            break;
+        case Wa_CompressPos1:
+            PosStep_Compress = stepPos1 + 5000;
+            speedstep = 9000;
+            Pos_Compress = 1;
+            goto skip_wa;
+        case Wa_CompressPos2:
+            PosStep_Compress = 1000;
+            speedstep = 9000;
+            Pos_Compress = 1;
+            skip_wa: if ((!InCompress) && (!delay_flag))
+            {
+                step_statusWarm[Wa_Step] = St_Running;
+                InCompress = CompressTriger = 1;
+
+                Cmd_WriteMsg(&Compress_Process_Run, (void*) &Pos_Compress);
+            }
+            if ((InCompress) && (step_statusWarm[Wa_Step] == St_Finish))
+            {
+                InCompress = 0;
+                if (cancel_cmd)
+                {
+                    Wa_Step = Wa_ReturnHome2;
+                    cancel_cmd = 0;
+                    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
+                    PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
+                    break;
+                }
+                if (Wa_Step == Wa_CompressPos1)
+                {
+
+                    TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1 | Valve_2,
+                    true);
+                    uint32_t countDuty = (uint32_t) (0.45
+                            * PWMGenPeriodGet(PWM0_BASE, PWM_GEN_1));
+                    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, countDuty);
+                    PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
+
+                }
+                Delay_20ms(100);
+                Wa_Step++;
+            }
+            break;
+        case Wa_WarmingBrew:
+            if ((!WarmingFlag) && (!delay_flag))
+            {
+                WarmingFlag = true;
+                PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
+                PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
+                TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_2, false);
+
+            }
+            if (step_statusWarm[Wa_Step] == St_Finish)
+            {
+                Wa_Step++;
+            }
+            break;
+        case Wa_FinishWarm:
+            InWarming = cancel_cmd = 0;
+            Wa_Step = Wa_ReturnHome1;
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 0);
+            PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
+            TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_2, true);
+            TCA9539Regs_Write16Pin(&TCA9539_IC3, Valve_1, false);
+            TimerIntDisable(TIMER4_BASE, TIMER_TIMA_TIMEOUT);
+            QEIIntDisable(QEI0_BASE, QEI_INTTIMER);
+            break;
+        }
+    }
+    B_Group_Task = &CheckFinish_Warming;
+}
+
 void LookUpCompressTime(void)
 {
     PitchOfpress = ModeSelected->Pitch;
@@ -1606,7 +1735,7 @@ void CheckingFinish_Cleanning(void)
             }
             break;
         case Cl_InsertPodClean: // Insert POD key clean
-            if (InInsertPod && (TCA9539_IC1.TCA9539_Input.all & BT9) == 0) // Select tha thuoc ve sinh
+            if (InInsertPod && (TCA9539_IC1.TCA9539_Input.all & Clean_Bt) == 0) // Select tha thuoc ve sinh
                 step_statusClean[Cl_Step] = St_Finish;
 
             break;
@@ -1650,12 +1779,13 @@ void CleanProcess()
             {
                 InHomeReturn = 0;
                 Cl_Step++;
+                if (clModeRinse && Cl_Step == Cl_Pumping2)
+                    Cl_Step = Cl_FinishCLean;
                 if (cancel_cmd)
                 {
                     Cl_Step = Cl_FinishCLean;
                     cancel_cmd = 0;
                 }
-
             }
             break;
         case Cl_CompressPos1:
@@ -1757,6 +1887,7 @@ void CleanProcess()
     B_Group_Task = &CheckingFinish_Cleanning;
 
 }
+
 inline void ExtraCompress(void)
 {
     if (InPumping)
@@ -1777,14 +1908,14 @@ inline void SweptErrorInRunning(void)
 {
     static uint8_t trigger, vr_ReleaseDelay = 0;
     _Bool errorForceCancel = ErNoPumpPulse || ErOutletDetect;
-/*    if (ErHomeReturn && (ErHomeStr == 0))
-    {
-        TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true);
-        (vr_ReleaseDelay > 10) ?
-                (TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, false), ErHomeStr =
-                        1, vr_ReleaseDelay = 0) :
-                (vr_ReleaseDelay++);
-    }*/
+    /*    if (ErHomeReturn && (ErHomeStr == 0))
+     {
+     TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true);
+     (vr_ReleaseDelay > 10) ?
+     (TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, false), ErHomeStr =
+     1, vr_ReleaseDelay = 0) :
+     (vr_ReleaseDelay++);
+     }*/
     if (!errorForceCancel)
         trigger = 0;
     if (errorForceCancel & trigger == 0)
@@ -1874,8 +2005,8 @@ inline void ReleaseErrorMotor(void)
     static uint8_t stage = 0;
     if (!holdShaftMotor)
         return;
-    uint16_t error = TCA9539Regs_Read16Pin(&TCA9539_IC3, WarningPressMotor);
-    if ((error == 0) && (TriggerShaftRelease == 0))
+    uint16_t errorM = TCA9539Regs_Read16Pin(&TCA9539_IC3, WarningPressMotor);
+    if ((errorM == 0) && (TriggerShaftRelease == 0))
     {
         TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, true); //  Disable motor
         TCA9539_IC2.updateOutputFlag = true;
@@ -1887,12 +2018,12 @@ inline void ReleaseErrorMotor(void)
     }
     if (!TriggerShaftRelease)
         return;
-    if (VrShaftRelease >= 25)
+    if (VrShaftRelease >= 5)
     {
         switch (stage)
         {
         case 0:
-            TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, false);
+            TCA9539Regs_Write16Pin(&TCA9539_IC2, Enable_BLDC2, false); // Enalbe motor
             TCA9539_IC2.updateOutputFlag = true;
             VrShaftRelease = 0;
             stage = 1;
@@ -1900,6 +2031,7 @@ inline void ReleaseErrorMotor(void)
         case 1:
             stage = 0;
             TriggerShaftRelease = false;
+
             break;
         }
     }

@@ -73,7 +73,7 @@ void ParameterDefaultSetting()
     Mode_Espresso_2.smallSize = 0;
     //-----------------------------------------------------
     HotWater_Temperature_Ref = 92;
-    Steam_Temperature_Ref = 120;
+    Steam_Temperature_Ref = 115;
     PitchOfpress = 15;
     wBladeATimes = 20000;
     wBladeBTimes = 20000;

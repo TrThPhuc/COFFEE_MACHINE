@@ -39,6 +39,7 @@ extern TCA9539Regs TCA9539_IC1;
 #define InitPageDisplay 3
 #define AddDataEeprom   0x00
 
+#define debuglcd
 //------------------------------- Status machine --------------------------------
 extern _Bool Error;
 
@@ -94,6 +95,7 @@ void Page7_Display(void);   // Page 2 display
 void Page8_Display(void);
 void Page9_Display(void);
 void Page10_Display(void);
+void Page11_Display(void);
 
 void defaultcmd(void);
 void pageWelcom_Display(void);
@@ -173,7 +175,7 @@ char *LCD_String_Page6[8] =
           "Nhiet do(oC): ", "Do ep(mm): " }; //
 
 char *LCD_String_Page2[10] = { "Espresso 1 ly", "Espresso 2 ly",
-                               "Special 1 ly ", "Special 2 ly", "Gioi Han" };
+                               "Special 1 ly ", "Special 2 ly", "Gioi Han", "Group Setting" };
 char *LCD_String_Page0[16] = { "Da san sang", "Dang ve sinh",
                                "Tha thuoc ve sinh", "Dang ve sinh", "thuoc",
                                "Espresso", "Espresso", "Special", "Special",
@@ -184,15 +186,13 @@ extern float ppi;
 char LCD_PosStr_page0[16] =
         { 34, 32, 15, 32, 55, 16, 8, 20, 10, 24, 46, 35, 10 };
 bool Int_Format_parameter[5] = { 1, 1, 0, 0, 1 };
-//char *LCD_Format_Parameter[5] = { "%d", "%d", "%d", "%.1f", "%d" };
 union NumConvert_u LCD_Step[5] = { { .unintNum = 1 }, { .unintNum = 1 }, {
         .floatNum = 0.1 },
                                    { .floatNum = 0.5 }, { .unintNum = 1 } };
-//uint32_t LCD_Step_Parameter[6] = { 1, 1, 1, 1, 1, 1 };
 
 // preInfusion, volume Pulse, grinding dur, Temperature, Pitch
-union NumConvert_u LCD_Max_Parameter[5] = { { .unintNum = 7 },
-                                            { .unintNum = 250 }, { .floatNum =
+union NumConvert_u LCD_Max_Parameter[5] = { { .unintNum = 50 },
+                                            { .unintNum = 500 }, { .floatNum =
                                                     20 },
                                             { .floatNum = 120 }, { .unintNum =
                                                     19 } };
@@ -206,6 +206,8 @@ uint32_t MaxTimesBlade = 65000, MinTimesBlade = 2000, stepTimesBalde = 100;
 uint32_t MaxTimesExtract = 90000, MinTimesExtract = 2000,
         stepTimesExtract = 100;
 uint32_t MaxExtract = 50, MinExtract = 15, stepExtract = 1;
+uint32_t maxDutyWarmingGroup = 95, minDutyWarmingGroup = 0,
+        stepDutyWarmingGroup = 1;
 float LCD_Step_Calib = 0.1f;
 char str[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x7C, 0x38,
                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -214,21 +216,20 @@ typedef struct Node Node_t;
 typedef struct
 {
     uint8_t page;
-    Node_t *item[5];
+    Node_t *item[6];
     Node_t *returnN;
 } Node;
 
 Node Menu;
 Node Mode, Warning, InfoMachine, ErrorList;
 Node Espresso_1, Espresso_2, Decatt_1, Decatt_2;
-Node LimitTime;
+Node LimitTime, WarmingSeting;
 Node GrindModule, ExtractionModule;
 Node *NodeSelected;
 Node *MenuList[] = { &Mode, &Warning, &InfoMachine, &ErrorList, NULL };
 
 Node *nullnode[] = { NULL, NULL, NULL, NULL, NULL };
-Node *ModeList[] =
-        { &Espresso_1, &Espresso_2, &Decatt_1, &Decatt_2, &LimitTime };
+Node *ModeList[] = { &Espresso_1, &Espresso_2, &Decatt_1, &Decatt_2, &LimitTime,  &WarmingSeting };
 Node *WarningList[] = { &GrindModule, &ExtractionModule };
 
 void AddNode(Node *Node_pr, uint8_t _page, Node **Node_ch, Node *_returnN)
@@ -236,7 +237,7 @@ void AddNode(Node *Node_pr, uint8_t _page, Node **Node_ch, Node *_returnN)
     uint8_t i;
     Node_pr->page = _page;
 
-    for (i = 0; i < 5; i++)
+    for (i = 0; i < 6; i++)
     {
         if (Node_ch != NULL)
             Node_pr->item[i] = (Node_t*) Node_ch[i];
@@ -255,6 +256,7 @@ void MenuInitialize()
     AddNode(&Decatt_1, 8, NULL, &Mode);
     AddNode(&Decatt_2, 9, NULL, &Mode);
     AddNode(&LimitTime, 14, NULL, &Mode);   // 10 - calibration
+    AddNode(&WarmingSeting, 15, NULL, &Mode);
 
     AddNode(&Warning, 3, (Node**) &WarningList, &Menu);
     AddNode(&GrindModule, 11, NULL, &Warning);
@@ -405,6 +407,11 @@ void ButtonSet_cmd()
 
                     ObjSelectMax = &MaxExtract;
                     ObjSelectMin = &MinExtract;
+                    break;
+                case 15:
+                    ObjSelectStep = &stepDutyWarmingGroup;
+                    ObjSelectMax = &maxDutyWarmingGroup;
+                    ObjSelectMin = &minDutyWarmingGroup;
                     break;
 
                 }
@@ -611,7 +618,7 @@ void PageDisplay()
             break;
         case 2:
             PagePointer = &Page2_Display;
-            NumOfPr = 5;
+            NumOfPr = 6;
             Ack_PrAdj = 0;
             break;
         case 3:
@@ -643,6 +650,13 @@ void PageDisplay()
         case 14:
             PagePointer = &Page10_Display;
             Offset = 5;
+            Ack_PrAdj = 1;
+            NumOfPr = 2;
+            break;
+
+        case 15:
+            PagePointer = &Page11_Display;
+            Offset = 13;
             Ack_PrAdj = 1;
             NumOfPr = 2;
             break;
@@ -755,11 +769,11 @@ void Page0_Display(void)
     {
         upload = 0;
         HomePage = 1;
-//  static float tempGui;
-        if (VrTimer1[3] >= 15)
+  static float tempGui;
+        if (VrTimer1[3] >= 10)
         {
             VrTimer1[3] = 0;
-            // tempGui = *(float*) dataSentList[HotWaterTemp];
+             tempGui = *(float*) dataSentList[HotWaterTemp];
         }
         else
             VrTimer1[3]++;
@@ -768,11 +782,11 @@ void Page0_Display(void)
     sprintf(Str_Temp, "%.1f", tempGui);     // hot water temperature
     Disp_Str_5x8_Image(7, 72, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);  // extraction time
-    Disp_Str_5x8_Image(7, 15, (uint8_t*) Str_Temp, LCD_IMAGE);
+    //sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);  // extraction time
+    //Disp_Str_5x8_Image(7, 15, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]); // pulse volumeter
-    Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
+    //sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]); // pulse volumeter
+    //Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
 #endif
         if (calibWeightFlag)
             Disp_Str_5x8_Image(5, 10, "Weight calibration", LCD_IMAGE);
@@ -826,8 +840,8 @@ void Page0_Display(void)
                 Disp_Str_8x16_Image(3, LCD_PosStr_page0[id_Page0],
                                     (uint8_t*) Str_Display);
                 // Display grind time
-                sprintf(Str_Temp, "%.1f", ppi);
-                Disp_Str_5x8_Image(7, 82, (uint8_t*) Str_Temp, LCD_IMAGE);
+               // sprintf(Str_Temp, "%.1f", tempGui);
+               // Disp_Str_5x8_Image(7, 82, (uint8_t*) Str_Temp, LCD_IMAGE);
                 // Display extraction time
                 sprintf(Str_Temp, "%.0f",
                         *(float*) dataSentList[ExtractionTime]);
@@ -1150,6 +1164,35 @@ void Page10_Display(void)
     // Display cursor
     pointer_pos = (Pr_Index - id + 1) * 2 + 1;
     Page_Cursor_Display(1, pointer_pos);
+
+}
+void Page11_Display(void)
+{
+    uint8_t id, pointer_pos;
+    id = Down_window_index;
+
+//------------------------------------------------------------------------
+    Str_Display = "Cai dat ham coi";
+    Disp_Str_5x8_Image(1, 15, (uint8_t*) Str_Display, LCD_IMAGE);
+
+    Str_Display = "Nhiet do coi:";
+    Disp_Str_5x8_Image(3, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[GroupTemp]);
+    Disp_Str_5x8_Image(3, 85, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+    Str_Display = "Run Duty:";
+    Disp_Str_5x8_Image(5, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+    sprintf(Str_Temp, "%d", Pr_PacketCopy[13]);
+    Disp_Str_5x8_Image(5, 85, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+    Str_Display = "Shutdown Duty:";
+    Disp_Str_5x8_Image(7, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+    sprintf(Str_Temp, "%d", Pr_PacketCopy[14]);
+    Disp_Str_5x8_Image(7, 85, (uint8_t*) Str_Temp, LCD_IMAGE);
+    //------------------------------------------------------------------------
+    // Display cursor
+    pointer_pos = (Pr_Index - id + 1) * 2 + 3;
+    Page_Cursor_Display(3, pointer_pos);
 
 }
 void pageWelcom_Display()

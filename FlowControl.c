@@ -42,7 +42,9 @@ extern void Pumping_Process_Stop(void *PrPtr);
 extern float Gui_CoffeExtractionTime;
 void FlowMeterCal(void);
 extern _Bool InCleanning;
-static float v1, v2;
+//static float v1, v2;
+float Dec = 0.8, Decspeed = 0.4;
+_Bool posspeed;
 _Bool ErNoPumpPulse;
 extern uint32_t wExtract_MaxTime, wExtract_MinTime;
 void QEP_CoffeeMachine_cnf(void)
@@ -81,14 +83,23 @@ void FlowMeterCal()
     if (QEIIntStatus(QEI0_BASE, true) == QEI_INTTIMER)
     {
         QEIIntClear(QEI0_BASE, QEI_INTTIMER);
-
         MilliLitresBuffer = (float) QEIPositionGet(QEI0_BASE);
         // Calculate the vollume pumping
         if (Gui_CoffeExtractionTime > wExtract_MaxTime)
-            Pumping_Process_Stop(Null);
-        else if ((Gui_CoffeExtractionTime > wExtract_MinTime) || InCleanning)
         {
+            Pumping_Process_Stop(Null);
+            return;
+        }
+        if ((Gui_CoffeExtractionTime > wExtract_MinTime) || InCleanning)
+        {
+            if ((MilliLitresBuffer >= SetVolume * Dec) && (posspeed == false))
+            {
+                uint32_t countDuty = (uint32_t) (Decspeed
+                        * PWMGenPeriodGet(PWM0_BASE, PWM_GEN_1));
+                PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, countDuty);
+                posspeed = true;
 
+            }
             if ((MilliLitresBuffer >= SetVolume) && (FinishPumpEvent == false))
 
             {
@@ -96,24 +107,23 @@ void FlowMeterCal()
                 Pumping_Process_Stop(Null);
             }
         }
+        /*        if (VrTimeVel >= 100)
+         {
+         VrTimeVel = 0;
+         FlowMeter = FlowMeter_Pulse * 0.25;
+         FlowMeter_Pulse = 0;
 
-        if (VrTimeVel >= 100)
-        {
-            VrTimeVel = 0;
-            FlowMeter = FlowMeter_Pulse * 0.25;
-            FlowMeter_Pulse = 0;
+         }
+         else
+         {
+         FlowMeter_Pulse += QEIVelocityGet(QEI0_BASE);
+         VrTimeVel++;
+         }*/
+        /*
+         if (!InPumping)
+         return;
 
-        }
-        else
-        {
-            FlowMeter_Pulse += QEIVelocityGet(QEI0_BASE);
-            VrTimeVel++;
-        }
-
-        if (!InPumping)
-            return;
-
-        /*        if (eVrTimer[eVrPumpingPulse] >= 500)
+         if (eVrTimer[eVrPumpingPulse] >= 500)
          {   // 2s
          eVrTimer[eVrPumpingPulse] = 0;
          v1 = MilliLitresBuffer;
@@ -133,7 +143,8 @@ void InitPumpingEvent(void)
     QEIPositionSet(QEI0_BASE, 0x0000);        // Initalize
     MilliLitresBuffer = 0;
     VrTimeVel = 0;
-    v1 = v2 = 0;
+    posspeed = false;
+    // v1 = v2 = 0;
     uint32_t status = QEIIntStatus(QEI0_BASE, true);
     QEIIntClear(QEI0_BASE, status);   // Clear any interrupt flag
     QEIIntEnable(QEI0_BASE, QEI_INTTIMER);  // Init interrupt timer out
