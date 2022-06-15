@@ -58,14 +58,25 @@
 #define SensorOutlet        1
 #define NonSensorOutlet     0
 #define Outlet  NonSensorOutlet
+
+#define NumOfParInEachMode  7
+#define NumberOfParameter 48
+#define NumOfObjWindow 4
+#define NumOfParTemperature  4
 struct AmountofWater
 {
     uint32_t stage_1;   //  Low flow
     uint32_t stage_2;   //  High flow
 };
+typedef enum MotorInfusion_e{
+  noMotor = 0,
+  haveMotor = 1
+}MotorInfusion;
 typedef struct Mode_Parameter
 {
     uint32_t PreInfusion;           // Pre-Infusion Time. Uint - second
+    uint32_t PosInfusion;
+    float SpeedMotorInfusion;
     uint32_t Time;                  // Time for extraction  Uinit - second
 
     struct AmountofWater AmountOfWaterPumping;
@@ -75,6 +86,8 @@ typedef struct Mode_Parameter
     uint32_t Pitch;
     uint16_t Cups;                  // Number of Cups
     bool smallSize;
+    bool MotorPreInfusion;
+    uint8_t IndexMode;
 
 } Mode_Parameter_t;
 void ParameterDefaultSetting();
@@ -99,6 +112,7 @@ enum GuiParamter
     ExtractAtimes,
     ExtractBtimes,
     GroupTemp,
+    BoilerTemp,
 };
 
 enum errorlist
@@ -150,11 +164,16 @@ enum CountStorage
 {
     CupsE1, CupsE2, CupsS1, CupsS2, BladeL, BladeR, RonTimes
 };
+enum VirtualTimer
+{
+    refreshPage, holdButtonHome, displayBootPage, displayTemperature, holdButtonUp, displayError, holdButtonDown
 
-#define DataCountSaveAddress   0xA0
+};
+#define DataCountSaveAddress   0xC4
 extern bool TestModuleTrigger;
 bool TestModuleStart;
-
-
-
+void ParameterDefaultSetting();
+void AssignParameterForMode(Mode_Parameter_t *thisMode, uint32_t **vPar);
+void AssignGobalParSetting(uint32_t **vPar);
+void AssignErrorList(void);
 #endif /* COFFEE_MACHINE_H_ */

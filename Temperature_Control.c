@@ -18,7 +18,7 @@
 #include "PID.h"
 #include "DCL_PID.h"
 
-#define Shutdown_Temp_Steam 130.0f
+#define Shutdown_Temp_Steam 125.0f
 #define Shutdown_Temp_HotWater 120.0f
 
 #define PID_method
@@ -67,7 +67,6 @@ void Temperature_Control(void)
             if (PWMSSR1Enable)
                 CNTL_2P2Z(&Steam_CNTL);
             if (PWMSSR2Enable)
-               // CNTL_2P2Z(&HotWater_CNTL);
                 CNTL_PID_DCL(&HotWater_PID_DCL);
            if (PWMSSR3Enable)
                 CNTL_Extrude();
@@ -201,7 +200,7 @@ void LowFreqPWM(void)
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0); // turn on ssr out
         }
 
-        if (dutyCount_SSR3 < 100)
+        if (dutyCount_SSR3 < 400)
         {
             dutyCount_SSR3++;
 
@@ -209,7 +208,7 @@ void LowFreqPWM(void)
         else
         {
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5); // turn off ssr out
-            activeDuty_SRR3 = 100 - Extrude_Vout; //Shadow Update to active when counter match period
+            activeDuty_SRR3 = 400 - Extrude_Vout*4; //Shadow Update to active when counter match period
             dutyCount_SSR3 = 0;
         }
 

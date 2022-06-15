@@ -121,7 +121,7 @@ extern void SerialCommsInit(void); // Initialize task
 extern void SerialHostComms(void); // Task proceessed in period
 //Variable
 uint16_t *dataSentList[24]; // Terminal connect to monitor variable
-uint32_t *Pr_Packet[32];    // Terminal connect to Parameter
+uint32_t *Pr_Packet[NumberOfParameter];    // Terminal connect to Parameter
 uint8_t coeff_change;   // Flag for change parameter in mode /////////
 int16_t VrTimer1[8];    // Virtual timer
 ////////////Used for DMA mode///////////////////////
@@ -215,16 +215,17 @@ void C2(void);
 
 void D1(void);
 
-#define  ModeInterpreter( _Mode,  _Led, _Id, _cbIndex, _maskCompress)    \
-do                                                                       \
-{                                                                        \
-    ModeSelected = _Mode;                                                \
-    TCA9539_IC1.TCA9539_Onput.all |= _Led;                               \
-    idModeRunning = _Id;                                                 \
-    mode_str = true;                                                     \
-    release_mode = 0;                                                    \
-    calibWeightObj = _cbIndex;                                           \
-    MaskExtraCompress =  _maskCompress;                                  \
+#define  ModeInterpreter( _Mode,  _Led, _Id, _maskCompress)                     \
+do                                                                              \
+{                                                                               \
+    uint8_t frameOfEachMode = 8, grindObjIndex = 5;                             \
+    ModeSelected = _Mode;                                                       \
+    TCA9539_IC1.TCA9539_Onput.all |= _Led;                                      \
+    idModeRunning = _Id;                                                        \
+    mode_str = true;                                                            \
+    release_mode = 0;                                                           \
+    calibWeightObj = (ModeSelected ->IndexMode) * frameOfEachMode + grindObjIndex;     \
+    MaskExtraCompress =  _maskCompress;                                         \
 }while(0)
 
 uint16_t parameter[10] = { };
@@ -403,10 +404,10 @@ void main(int argc, char **argv)
     LCD_ST7567_Init();   // LCD initialize
     // Initialize GUI interface
     SerialCommsInit();
-
-    VrTimer1[3] = 15;
+    uint32_t count1sForVrTImer = 15;
+    VrTimer1[displayTemperature] = count1sForVrTImer;
     // Assign data stream to Gui variable display LCD - Display on Page 0 LCD
-    dataSentList[cupsEspresso_1] = &Mode_Espresso_1.Cups;   //&SumOfCupInUsed;
+    dataSentList[cupsEspresso_1] = &Mode_Espresso_1.Cups;
     dataSentList[cupsEspresso_2] = &Mode_Espresso_2.Cups;
 
     dataSentList[cupsSpecial_1] = &Mode_Special_1.Cups;
@@ -429,44 +430,18 @@ void main(int argc, char **argv)
     dataSentList[Model] = (uint16_t*) &ModelName;
     dataSentList[ProductDate] = (uint16_t*) &ProductDateStr;
     dataSentList[GroupTemp] = (uint16_t*) &Group_Temp;
+    dataSentList[BoilerTemp] = (uint16_t*) &Gui_TempSteam;
 
     //"Set" variables
 //===================================================================================
-    //-------------------------------------------------------------------------------
-    // Assign GUI parameter  to desired  parameter setting addresses(GUI Parameter)
-    Pr_Packet[0] = &Mode_Espresso_1.PreInfusion; //     Preinfution duration
-    Pr_Packet[1] = &Mode_Espresso_1.AmountOfWaterPumping.stage_1; //volumed
-    Pr_Packet[2] = (uint32_t*) &Mode_Espresso_1.GrindingDuration; // //time for grind
-    Pr_Packet[3] = (uint32_t*) &HotWater_Temperature_Ref;   // Gobal variable
-    Pr_Packet[4] = &Mode_Espresso_1.Pitch;
-    //-------------------------------------------------------------------------------
-    Pr_Packet[8] = &Mode_Espresso_2.PreInfusion;
-    Pr_Packet[9] = &Mode_Espresso_2.AmountOfWaterPumping.stage_1;
-    Pr_Packet[10] = (uint32_t*) &Mode_Espresso_2.GrindingDuration;
-    Pr_Packet[11] = (uint32_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[12] = &Mode_Espresso_2.Pitch;
-    //-------------------------------------------------------------------------------
-    Pr_Packet[16] = &Mode_Special_1.PreInfusion;
-    Pr_Packet[17] = &Mode_Special_1.AmountOfWaterPumping.stage_1;
-    Pr_Packet[18] = (uint32_t*) &Mode_Special_1.GrindingDuration;
-    Pr_Packet[19] = (uint32_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[20] = &Mode_Special_1.Pitch;
-    //-------------------------------------------------------------------------------
-    Pr_Packet[24] = &Mode_Special_2.PreInfusion;
-    Pr_Packet[25] = &Mode_Special_2.AmountOfWaterPumping.stage_1;
-    Pr_Packet[26] = (uint32_t*) &Mode_Special_2.GrindingDuration;
-    Pr_Packet[27] = (uint32_t*) &HotWater_Temperature_Ref;
-    Pr_Packet[28] = &Mode_Special_2.Pitch;
+    ParameterDefaultSetting();
 
-    Pr_Packet[29] = &wBladeATimes;
-    Pr_Packet[30] = &wBladeBTimes;
-    Pr_Packet[21] = &wExtractionATimes;
-    Pr_Packet[22] = &wExtractionBTimes;
-    Pr_Packet[5] = &wExtract_MaxTime;
-    Pr_Packet[6] = &wExtract_MinTime;
-    Pr_Packet[13] = &wGroupDuty;
-    Pr_Packet[14] = &wGroupShutdownDuty;
+    AssignParameterForMode(&Mode_Espresso_1, Pr_Packet);
+    AssignParameterForMode(&Mode_Espresso_2, Pr_Packet);
+    AssignParameterForMode(&Mode_Special_1, Pr_Packet);
+    AssignParameterForMode(&Mode_Special_2, Pr_Packet);
 
+    AssignGobalParSetting(Pr_Packet);
     // Assign direction motor of grind module
 
     Mode_Espresso_1.DirGrinding = Mode_Espresso_2.DirGrinding = true;
@@ -482,20 +457,18 @@ void main(int argc, char **argv)
     CountDataStorage[BladeL] = &BladeA;
     CountDataStorage[BladeR] = &BladeB;
     CountDataStorage[RonTimes] = &Ron;
-
-    ParameterDefaultSetting();
     AssignErrorList();
     // Read EEPROM memory
 
 #ifdef SaveEeprom
     IntMasterDisable();
-    uint32_t tempt32DataRead[32];
+    uint32_t tempt32DataRead[NumberOfParameter];
     uint32_t *ui32Ptr = (uint32_t*) tempt32DataRead;
     uint8_t i = 0;
     //----------------------------------------------------------------------------------------//
-    EEPROMRead(tempt32DataRead, AddDataEeprom, 32 * 4);
+    EEPROMRead(tempt32DataRead, AddDataEeprom, NumberOfParameter * 4);
     // Attract 32 bit packet to 16 bit packet and initalize to system parameter;
-    for (i = 0; i < 32; i++)
+    for (i = 0; i < NumberOfParameter; i++)
     {
         *Pr_Packet[i] = ui32Ptr[i];
     }
@@ -728,22 +701,22 @@ void C1(void)
     {
         if ((TCA9539_IC1.TCA9539_Input.all & Special1_Bt) == 0)
         {
-            ModeInterpreter(&Mode_Special_1, LED_BT5, 7, 18, false);
+            ModeInterpreter(&Mode_Special_1, LED_BT5, 7, false);
 
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Special2_Bt) == 0)
         {
 
-            ModeInterpreter(&Mode_Special_2, LED_BT7, 8, 26, true);
+            ModeInterpreter(&Mode_Special_2, LED_BT7, 8, true);
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso1_Bt) == 0)
         {
 
-            ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, 2, false);
+            ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, false);
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso2_Bt) == 0)
         {
-            ModeInterpreter(&Mode_Espresso_2, LED_BT6, 6, 10, true);
+            ModeInterpreter(&Mode_Espresso_2, LED_BT6, 6, true);
         }
         /*        uint16_t moderead = TCA9539Regs_Read16Pin(&TCA9539_IC1,
          Special1_Bt | Special2_Bt | Expresso1_Bt | Expresso2_Bt);
@@ -824,6 +797,7 @@ void C1(void)
         if (TCA9539Regs_Read16Pin(&TCA9539_IC2, Warming_Bt) == 0)
         {
             release_WarmingB = 0;
+            idModeRunning = 13;
             WarmingPressMachine();
 
         }
@@ -987,7 +961,7 @@ void D1(void)
     if (HeatingHotwater && (!InCleanning) && (HotWater_Vout >= 50)
             && (HotWater_Temperature_Ref - 5))
     {
-        if (eVrTimer[eVrHotWaterHeatingTimeOut] >= 120)
+        if (eVrTimer[eVrHotWaterHeatingTimeOut] >= 250)
         {
 
             f1 = Hot_Water.Actual_temperature;
@@ -1010,7 +984,7 @@ void D1(void)
     static float f3, f4;
     if (HeatingSteam && (Steam_Vout >= 50) && (Gui_TempSteam < 110))
     {
-        if (eVrTimer[eVrSteamHeatingTimeOut] >= 220)
+        if (eVrTimer[eVrSteamHeatingTimeOut] >= 350)
         {
 
             f3 = Hot_Water.Actual_temperature;

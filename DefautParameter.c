@@ -17,13 +17,15 @@ extern float HotWater_Temperature_Ref, Steam_Temperature_Ref;
 extern uint16_t PitchOfpress;
 extern _Bool Pr_PacketCopyMask[];
 extern uint32_t wBladeATimes, wBladeBTimes, wExtractionATimes,
-        wExtractionBTimes;
+        wExtractionBTimes, wGroupDuty, wGroupShutdownDuty;
 extern uint32_t wExtract_MaxTime, wExtract_MinTime;
 extern uint16_t BladeA, BladeB, Ron;
 void ParameterDefaultSetting()
 {
     // Small size
     Mode_Special_1.PreInfusion = 4;
+    Mode_Special_1.PosInfusion = 2;
+    Mode_Special_1.SpeedMotorInfusion = 0.28;
     Mode_Special_1.Time = 25;                            // Not used
 
     Mode_Special_1.GrindingDuration = 9.3;               // 9.3 s
@@ -33,9 +35,13 @@ void ParameterDefaultSetting()
     Mode_Special_1.Cups = 0;
 
     Mode_Special_1.smallSize = 1;
+    Mode_Special_1.IndexMode = 2;
+    Mode_Special_1.MotorPreInfusion = haveMotor;
 //-----------------------------------------------------
     // Big size
     Mode_Special_2.PreInfusion = 4;
+    Mode_Special_2.PosInfusion = 2;
+    Mode_Special_2.SpeedMotorInfusion = 0.28;
     Mode_Special_2.Time = 25;                           // Not used
 
     Mode_Special_2.GrindingDuration = 11.5;               // 9.3s
@@ -45,10 +51,15 @@ void ParameterDefaultSetting()
     Mode_Special_2.Cups = 0;
 
     Mode_Special_2.smallSize = 0;
+    Mode_Special_2.IndexMode = 3;
+    Mode_Special_2.MotorPreInfusion = haveMotor;
     //-----------------------------------------------------
 
     // Small size
     Mode_Espresso_1.PreInfusion = 4;
+    Mode_Espresso_1.PosInfusion = 2;
+    Mode_Espresso_1.SpeedMotorInfusion = 0.28;
+
     Mode_Espresso_1.Time = 25;                            // Not used
 
     Mode_Espresso_1.GrindingDuration = 9.3;               //9.3s
@@ -58,10 +69,14 @@ void ParameterDefaultSetting()
     Mode_Espresso_1.Cups = 0;
 
     Mode_Espresso_1.smallSize = 1;
+    Mode_Espresso_1.IndexMode = 0;
+    Mode_Espresso_1.MotorPreInfusion = haveMotor;
     //-----------------------------------------------------
 
     // Big size
     Mode_Espresso_2.PreInfusion = 4;
+    Mode_Espresso_2.PosInfusion = 2;
+    Mode_Espresso_2.SpeedMotorInfusion = 0.28;
     Mode_Espresso_2.Time = 25;                              // Not used
 
     Mode_Espresso_2.GrindingDuration = 11.5;                  //9.3s
@@ -71,6 +86,8 @@ void ParameterDefaultSetting()
     Mode_Espresso_2.Cups = 0;
 
     Mode_Espresso_2.smallSize = 0;
+    Mode_Espresso_2.IndexMode = 1;
+    Mode_Espresso_2.MotorPreInfusion = haveMotor;
     //-----------------------------------------------------
     HotWater_Temperature_Ref = 92;
     Steam_Temperature_Ref = 115;
@@ -86,13 +103,46 @@ void ParameterDefaultSetting()
     BladeA = 0;
     BladeB = 0;
     Ron = 0;
+    wGroupDuty = 50;
+    wGroupShutdownDuty = 5;
+}
+void AssignParameterForMode(Mode_Parameter_t *thisMode, uint32_t **vPar)
+{
+    if (thisMode->IndexMode > 3)
+        return;
+    uint8_t frameOfEachMode = 8;
+    uint8_t index = thisMode->IndexMode * frameOfEachMode;
+    vPar[index + 0] = (uint32_t*) &thisMode->PreInfusion;
+    vPar[index + 1] = (uint32_t*) &thisMode->PosInfusion;
+    vPar[index + 2] = (uint32_t*) &thisMode->MotorPreInfusion;
+    vPar[index + 3] = (uint32_t*) &thisMode->SpeedMotorInfusion;
+    vPar[index + 4] = (uint32_t*) &thisMode->AmountOfWaterPumping.stage_1;
+    vPar[index + 5] = (uint32_t*) &thisMode->GrindingDuration;
+    vPar[index + 6] = (uint32_t*) &thisMode->Pitch;
+}
+void AssignGobalParSetting(uint32_t **vPar)
+{
+    uint8_t IndexGobalPar = 32;
+    vPar[IndexGobalPar + 0] = (uint32_t*) &wBladeATimes;
+    vPar[IndexGobalPar + 1] = (uint32_t*) &wBladeBTimes;
+    vPar[IndexGobalPar + 2] = (uint32_t*) &wExtractionATimes;
+    vPar[IndexGobalPar + 3] = (uint32_t*) &wExtractionBTimes;
+    vPar[IndexGobalPar + 4] = (uint32_t*) &wExtract_MaxTime;
+    vPar[IndexGobalPar + 5] = (uint32_t*) &wExtract_MinTime;
+    vPar[IndexGobalPar + 6] = (uint32_t*) &HotWater_Temperature_Ref;
+    vPar[IndexGobalPar + 7] = (uint32_t*) &Steam_Temperature_Ref;
+    vPar[IndexGobalPar + 8] = (uint32_t*) &wGroupDuty;
+    vPar[IndexGobalPar + 9] = (uint32_t*) &wGroupShutdownDuty;
+
+
+
 }
 void AssignErrorList(void)
 {
     uint8_t i;
     for (i = 0; i < 16; i++)
         ErrorMachine[i].ErrorFlag = NULL;
-    //---------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------
     ErrorMachine[eTCA_Ic1].ErrorFlag = &TCA9539_IC1.ErrorFlag; // Loi giao tiep i2c ic mo rong 1 tca
     ErrorMachine[eTCA_Ic2].ErrorFlag = &TCA9539_IC2.ErrorFlag; // Loi giao tiep i2c ic mo rong 2 tca
     ErrorMachine[eTCA_Ic3].ErrorFlag = &TCA9539_IC3.ErrorFlag; // Loi giao tiep i2c ic  mo rong 3 tca
@@ -108,7 +158,7 @@ void AssignErrorList(void)
     ErrorMachine[eNoPumpPulse].ErrorFlag = &ErNoPumpPulse; // Loi ko co xung luu luong
     ErrorMachine[eCoffeOutletDetect].ErrorFlag = &ErOutletDetect; // Loi cam bien ca phe ra
     ErrorMachine[eHomeReturn].ErrorFlag = &ErHomeReturn;   // loi ve home ko bat
-    //---------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------
 
     ErrorMachine[eTCA_Ic1].ErrorMsg = "Loi giao tiep tca1";
     ErrorMachine[eTCA_Ic1].ErrorMsg = "Loi giao tiep tca2";
