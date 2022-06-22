@@ -10,7 +10,7 @@
 extern Mode_Parameter_t Mode_Espresso_1, Mode_Espresso_2, Mode_Special_1,
         Mode_Special_2;
 extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
-extern bool Hyteresis, ErSteam, ErHotWater, ErOutletDetect, ErHomeReturn,
+extern bool ErPumpSteam, ErSteam, ErHotWater, ErOutletDetect, ErHomeReturn,
         ErSteamTimeOut, ErHotWaterTimeOut, ErNoPumpPulse;
 //extern float Steam_Temperature_Ref;
 extern float HotWater_Temperature_Ref, Steam_Temperature_Ref;
@@ -134,8 +134,6 @@ void AssignGobalParSetting(uint32_t **vPar)
     vPar[IndexGobalPar + 8] = (uint32_t*) &wGroupDuty;
     vPar[IndexGobalPar + 9] = (uint32_t*) &wGroupShutdownDuty;
 
-
-
 }
 void AssignErrorList(void)
 {
@@ -148,7 +146,7 @@ void AssignErrorList(void)
     ErrorMachine[eTCA_Ic3].ErrorFlag = &TCA9539_IC3.ErrorFlag; // Loi giao tiep i2c ic  mo rong 3 tca
     ErrorMachine[eAds11118].ErrorFlag = &eCom_Ads1118; //Loi giao tiep ic cam bien ads118
     ErrorMachine[eFaultMotor].ErrorFlag = NULL;
-    ErrorMachine[eLevelSensor].ErrorFlag = &Hyteresis;  // Loi cam bien muc
+    ErrorMachine[eLevelSensor].ErrorFlag = &ErPumpSteam;  // Loi cam bien muc
     ErrorMachine[eHotWaterOpen].ErrorFlag = &ErHotWater; // Loi cam bien nhiet binh nc nong
     ErrorMachine[eHotWaterTimeOut].ErrorFlag = &ErHotWaterTimeOut; // Loi ko dun binh nc nong
     ErrorMachine[eSteamOpen].ErrorFlag = &ErSteam;  // loi cam bien binh hoi

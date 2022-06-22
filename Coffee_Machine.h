@@ -52,8 +52,8 @@
 #define PosPress 1
 #define Int_SSI0
 
-#define HighLvSensor 2.2
-#define LowLvSensor 1.1
+#define HighLvSensor    2.6
+#define LowLvSensor     1
 
 #define SensorOutlet        1
 #define NonSensorOutlet     0
@@ -68,10 +68,10 @@ struct AmountofWater
     uint32_t stage_1;   //  Low flow
     uint32_t stage_2;   //  High flow
 };
-typedef enum MotorInfusion_e{
-  noMotor = 0,
-  haveMotor = 1
-}MotorInfusion;
+typedef enum MotorInfusion_e
+{
+    noMotor = 0, haveMotor = 1
+} MotorInfusion;
 typedef struct Mode_Parameter
 {
     uint32_t PreInfusion;           // Pre-Infusion Time. Uint - second
@@ -113,6 +113,8 @@ enum GuiParamter
     ExtractBtimes,
     GroupTemp,
     BoilerTemp,
+    PreinfusionTime,
+    GrindTime
 };
 
 enum errorlist
@@ -157,7 +159,7 @@ typedef enum eVrTimerList_e
     eVrHomeReturn,
     eVrHotWaterHeatingTimeOut,
     eVrSteamHeatingTimeOut,
-    eVrPumpingPulse
+    eVrPumpingSteamTimeOut,
 } eVrTimerList;
 
 enum CountStorage
@@ -166,11 +168,30 @@ enum CountStorage
 };
 enum VirtualTimer
 {
-    refreshPage, holdButtonHome, displayBootPage, displayTemperature, holdButtonUp, displayError, holdButtonDown
+    refreshPage,
+    holdButtonHome,
+    displayBootPage,
+    displayTemperature,
+    holdButtonUp,
+    displayError,
+    holdButtonDown
 
 };
+typedef enum ManualTest_e
+{
+    Ma_GrindMotor,
+    Ma_PumpMotor,
+    Ma_CompressMotor,
+    Ma_BrewValve,
+    Ma_CoffeeOutletValve,
+    Ma_BackRinseValve,
+    Ma_SteamInValve,
+    Ma_DrainBoilerValve
+} ManualTest;
+
 #define DataCountSaveAddress   0xC4
 extern bool TestModuleTrigger;
+
 bool TestModuleStart;
 void ParameterDefaultSetting();
 void AssignParameterForMode(Mode_Parameter_t *thisMode, uint32_t **vPar);

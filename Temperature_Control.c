@@ -19,7 +19,7 @@
 #include "DCL_PID.h"
 
 #define Shutdown_Temp_Steam 125.0f
-#define Shutdown_Temp_HotWater 120.0f
+#define Shutdown_Temp_HotWater 110.0f
 
 #define PID_method
 extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
@@ -34,7 +34,7 @@ extern ADS1118_t Steam, Hot_Water;
 _Bool PWMSSR1Enable, PWMSSR2Enable, PWMSSR3Enable;
 _Bool SteamMask, HotWaterMask, ExtrudeMask;
 _Bool ErSteam, ErHotWater, ErExtrude;
-extern volatile _Bool Hyteresis;
+extern volatile _Bool Hyteresis, ErPumpSteam;
 volatile _Bool HeatingSteam, HeatingHotwater;
 
 ADS1118_t *Temp_ptr;
@@ -68,7 +68,7 @@ void Temperature_Control(void)
                 CNTL_2P2Z(&Steam_CNTL);
             if (PWMSSR2Enable)
                 CNTL_PID_DCL(&HotWater_PID_DCL);
-           if (PWMSSR3Enable)
+            if (PWMSSR3Enable)
                 CNTL_Extrude();
 #endif
             SteamTempBuffer[counttest] = Steam.Actual_temperature;
@@ -142,7 +142,8 @@ void LowFreqPWM(void)
     uint32_t tempduty;
     TimerIntClear(TIMER5_BASE, TIMER_TIMA_TIMEOUT);
 //---------------------------------------------SSR1 - Steam -----------------------------------------
-    if (PWMSSR1Enable && !SteamMask && !Hyteresis)
+    bool LevelWaterEnough = Hyteresis || ErPumpSteam;
+    if (PWMSSR1Enable && !SteamMask && !LevelWaterEnough)
     {
         HeatingSteam = true;
         if (dutyCount_SSR1 == activeDuty_SRR1)
@@ -177,10 +178,10 @@ void LowFreqPWM(void)
         else
         {
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4); // turn off ssr out
-            if(HotWater_Vout < 0)
-                tempduty  = 0;
+            if (HotWater_Vout < 0)
+                tempduty = 0;
             else
-                tempduty = (uint16_t)HotWater_Vout;
+                tempduty = (uint16_t) HotWater_Vout;
             activeDuty_SRR2 = 100 - tempduty; //Shadow Update to active when counter match period
             dutyCount_SSR2 = 0;
         }
@@ -208,7 +209,7 @@ void LowFreqPWM(void)
         else
         {
             GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5); // turn off ssr out
-            activeDuty_SRR3 = 400 - Extrude_Vout*4; //Shadow Update to active when counter match period
+            activeDuty_SRR3 = 400 - Extrude_Vout * 4; //Shadow Update to active when counter match period
             dutyCount_SSR3 = 0;
         }
 

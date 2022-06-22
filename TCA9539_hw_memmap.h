@@ -21,8 +21,8 @@
 #define Cancel_Task             0x80        // Bit 7
 
 // Port 1
-#define LED_BT8                 0x100       // Bit 0
-#define LED_BT9                 0x200       // Bit 1
+#define LED_CLEAN                 0x100       // Bit 0
+#define LED_RINSE               0x200       // Bit 1
 #define Clean_Bt                0x400       // Bit 2
 #define LED_BT7                 0x800       // Bit 3
 
@@ -66,4 +66,6 @@
 #define WarningPressMotor       0x4000      // Bit 6
 #define Input_4                 0x8000      // Bit 7
 
+#define Release_Mode_Bt         0x78
+#define Release_Clean_Bt        0x8400
 #endif /* TCA9539_HW_MEMMAP_H_ */

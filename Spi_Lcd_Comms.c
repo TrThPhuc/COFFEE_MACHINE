@@ -39,7 +39,7 @@ extern TCA9539Regs TCA9539_IC1;
 #define InitPageDisplay 3
 #define AddDataEeprom   0x00
 
-#define debuglcd
+//#define debuglcd
 //------------------------------- Status machine --------------------------------
 extern _Bool Error;
 
@@ -77,6 +77,14 @@ volatile uint8_t currentcount = 0;
 #define pageNumTimesBalde       11
 #define pageNumTimeExtract      12
 
+#define     AckPrAdjIndex(x, p)                 \
+do                                              \
+{                                               \
+    if(Pr_Index == x && current_page == p)      \
+    Ack_PrAdj = 1;                              \
+    else                                        \
+    Ack_PrAdj = 0;                              \
+}while(0)
 typedef enum mathType_t MathType;
 void SerialCommsInit(void);
 void SerialHostComms(void);
@@ -108,6 +116,8 @@ void defaultcmd(void);
 void pageWelcom_Display(void);
 void Page_Cursor_Display(uint8_t page, uint8_t pos);   // Display cursor
 void DisplayError(void);
+void PageManual_Display(void);
+static inline void DisplayInfoInProcess(void);
 inline void PrintNum(MathType typePar, _Bool cur, void *Num);
 // Function prototype for EEPROM emulator
 extern void SaveParameterToEEPROM(void);
@@ -139,6 +149,7 @@ char *strMode;
 uint8_t idMask;
 uint8_t countList = 0;    // Count variable used to change page fuction
 uint32_t *ObjSelect, *ObjSelectStep, *ObjSelectMax, *ObjSelectMin; // Object selected and step Object pointer
+bool LoopValue = false;
 uint8_t ObjSelectFlag = 0;
 
 uint8_t current_page = 0, page_change = 1, layer = 0;
@@ -152,10 +163,10 @@ volatile uint8_t BsetFlag, BdownFlag, BupFlag;     // Flag used for scan process
 uint8_t Ack_PrAdj = 0;
 uint8_t Up_window_index = 3, Down_window_index = 0; // Windown display - 4 line
 extern bool calibWeightFlag, calibWeightStr;
-extern uint8_t calibWeightObj;
+extern uint8_t calibWeightObj, ManualObjSelected;
 extern uint16_t *dataSentList[]; //  Kernel terminal connect to monitor variable
 extern bool En, idleMachine, InCleanning, InProcess;
-
+extern bool InManualTest;
 extern uint32_t *Pr_Packet[NumberOfParameter]; // Kernel terminal connect to parameter
 union NumConvert_u
 {
@@ -175,6 +186,14 @@ _Bool Pr_PacketCopyMask[NumberOfParameter] = { };
 float Pr_Gui_Packet[10];            // Array for Gui display parameter
 uint8_t save_pr, cpy_pr;
 extern _Bool HoldMsgFlag;
+// --------------------------Manual Test-Control Module -----------------------------------------
+typedef enum MotorSlect_e
+{
+    GrindMotorSelect, PressMotorSelect, PumpMotorSelect
+
+} MotorSlect;
+uint32_t maMotorSlected, maIncrease = 1, maMax = 3, maMin;
+
 // --------------------------User variable used for display -----------------------------------------
 _Bool boostFlag = 1, HomePage = 0;
 char *Str_Display;
@@ -183,6 +202,10 @@ char Str_ErrorNum[10];
 char CurStr[3] = " <";
 uint8_t blinkCurVr;
 _Bool blinkCur;
+uint8_t holdBtVrTimeDown = 25, holdBtVrTimeUp = 25;
+char *LCD_String_Page1[] = { "Thong so: ", "Canh bao", "Thong tin may",
+                             "Thong tin loi", "Thu cong" };
+
 char *LCD_String_Page6[NumOfParInEachMode] = { "Pre-infusion1(s): ",
                                                "Pre-infusion2(s): ",
                                                "MotorInfusion: ",
@@ -193,15 +216,19 @@ char *LCD_String_Page6[NumOfParInEachMode] = { "Pre-infusion1(s): ",
 char *LCD_String_Page2[10] = { "Espresso 1 ly", "Espresso 2 ly",
                                "Special 1 ly ", "Special 2 ly", "Gioi Han",
                                "Nhiet do" };
+
+char *LCD_String_PageManual[] = { "Motor ", "Valve Brew", "Valve CoffeeOut",
+                                  "Valve BackRinse", "Valve Drain",
+                                  "Valve SteamIn", "VolumeMeter" };
+
 char *LCD_String_Page0[16] = { "Da san sang", "Dang ve sinh",
                                "Tha thuoc ve sinh", "Dang ve sinh", "thuoc",
                                "Espresso", "Espresso", "Special", "Special",
                                "Dang khoi dong", "Ve sinh", "hoc dung ba",
                                "Ma Loi:", " Dang ngam coi" };
 uint8_t id_Page0 = 0xFF, idModeRunning, idPage0Display[8];
-extern float ppi;
-char LCD_PosStr_page0[16] =
-        { 34, 32, 15, 32, 55, 16, 8, 20, 10, 24, 46, 35, 10,30 };
+char LCD_PosStr_page0[16] = { 34, 32, 15, 32, 55, 16, 8, 20, 10, 24, 46, 35, 10,
+                              30 };
 MathType Int_Format_parameter[NumOfParInEachMode] = { intMath, intMath,
                                                       boolMath, floatMath,
                                                       intMath, floatMath,
@@ -211,7 +238,7 @@ MathType Int_Format_TempParameter[NumOfParTemperature] = { floatMath, floatMath,
 union NumConvert_u InMode_StepChangeValue[NumOfParInEachMode] = {
         { .unintNum = 1 }, { .unintNum = 1 }, { .unintNum = 0 }, { .floatNum =
                 0.01 },
-        { .unintNum = 1 }, { .floatNum = 0.5 }, { .unintNum = 1 } };
+        { .unintNum = 1 }, { .floatNum = 0.1 }, { .unintNum = 1 } };
 
 // preInfusion, volume Pulse, grinding dur, Temperature, Pitch
 union NumConvert_u InMode_MaxParameter[NumOfParInEachMode] = {
@@ -227,11 +254,11 @@ uint32_t MaxTimesExtract = 90000, MinTimesExtract = 2000,
         stepTimesExtract = 100;
 uint32_t MaxExtract = 50, MinExtract = 15, stepExtract = 1;
 union NumConvert_u InTemp_MaxParameter[NumOfParTemperature] = {
-        { .floatNum = 110.0 }, { .floatNum = 125 }, { .unintNum = 95 }, {
-                .unintNum = 20 } };
+        { .floatNum = 110.0 }, { .floatNum = 125 }, { .unintNum = 99 }, {
+                .unintNum = 30 } };
 union NumConvert_u InTemp_MinParameter[NumOfParTemperature] = {
         { .floatNum = 90.0 }, { .floatNum = 115 }, { .unintNum = 5 }, {
-                .unintNum = 5 } };
+                .unintNum = 1 } };
 union NumConvert_u InTemp_StepChangeValue[NumOfParTemperature] = {
         { .floatNum = 0.5 }, { .floatNum = 1.0 }, { .unintNum = 1 }, {
                 .unintNum = 1 } };
@@ -248,14 +275,14 @@ typedef struct
 } Node;
 
 Node Menu;
-Node Mode, Warning, InfoMachine, ErrorList;
+Node Mode, Warning, InfoMachine, ErrorList, ManualControl;
 Node Espresso_1, Espresso_2, Decatt_1, Decatt_2;
 Node LimitTime, WarmingSeting;
 Node GrindModule, ExtractionModule;
 Node *NodeSelected;
-Node *MenuList[] = { &Mode, &Warning, &InfoMachine, &ErrorList, NULL };
+Node *MenuList[] = { &Mode, &Warning, &InfoMachine, &ErrorList, &ManualControl,
+NULL };
 
-Node *nullnode[] = { NULL, NULL, NULL, NULL, NULL };
 Node *ModeList[] = { &Espresso_1, &Espresso_2, &Decatt_1, &Decatt_2, &LimitTime,
                      &WarmingSeting };
 Node *WarningList[] = { &GrindModule, &ExtractionModule };
@@ -299,40 +326,33 @@ void MenuInitialize()
 
     AddNode(&InfoMachine, 4, NULL, &Menu);
     AddNode(&ErrorList, 5, NULL, &Menu);
+    AddNode(&ManualControl, 13, NULL, &Menu);
 
 }
 void EnterNode()
 {
 
-    if (BupFlag == 0 && Ack_Enter == 0)
-    {
-        Ack_reset = 1;
-        Ack_Enter = 1;
-        Node *ptr = (Node*) NodeSelected->item[Pr_Index];
-        if (ptr == NULL)
-            return;
-        NodeSelected = ptr;
-        current_page = NodeSelected->page;
-        page_change = 1;
-        ObjSelectFlag = 0;
-    }
+    Ack_Enter = 0;
+    Node *ptr = (Node*) NodeSelected->item[Pr_Index];
+    if (ptr == NULL)
+        return;
+    NodeSelected = ptr;
+    current_page = NodeSelected->page;
+    page_change = 1;
+    ObjSelectFlag = 0;
 
 }
 void ReturnNode()
 {
+    Ack_Return = 0;
+    Node *ptr = (Node*) NodeSelected->returnN;
+    if (ptr == NULL)
+        return;
+    NodeSelected = (Node*) NodeSelected->returnN;
+    current_page = NodeSelected->page;
+    page_change = 1;
+    ObjSelectFlag = 0;
 
-    if (BdownFlag == 0 && Ack_Return == 0)
-    {
-        Ack_Return = 1;
-        Ack_reset = 1;
-        Node *ptr = (Node*) NodeSelected->returnN;
-        if (ptr == NULL)
-            return;
-        NodeSelected = (Node*) NodeSelected->returnN;
-        current_page = NodeSelected->page;
-        page_change = 1;
-        ObjSelectFlag = 0;
-    }
 }
 void SerialCommsInit(void)
 {
@@ -349,7 +369,7 @@ void SerialHostComms(void)
 void GetButtonCmd(void)
 {
 
-    // Read external gpio ic
+// Read external gpio ic
     BsetFlag = ReadMenuB;
     BupFlag = ReadUpB;
     BdownFlag = ReadDownB;
@@ -368,6 +388,42 @@ void GetButtonCmd(void)
     {
 
         CmdDispatcher = &ButtonDown_cmd;                    // Down button
+    }
+    else
+    {
+        if (Ack_reset == 1)
+        {
+            if (VrTimer1[holdButtonHome] > 500)
+            {
+                Ack_reset = 0;
+                ObjSelectFlag = 0;
+                current_page = 0;
+                VrTimer1[displayBootPage] = 150; // VrTimer2 for display boot page
+                boostFlag = 1;
+
+                NodeSelected = &Menu;
+            }
+            else
+                VrTimer1[holdButtonHome]++;
+        }
+        CmdDispatcher = &defaultcmd;
+    }
+    if (BsetFlag == Menu_Bt)
+    {
+        Ack_BSet = 0;
+
+    }
+     if (BdownFlag == Down_Bt)
+    {
+        Ack_Bdown = 0;
+        VrTimer1[holdButtonDown] = 0;
+        holdBtVrTimeDown = 25;
+    }
+     if (BupFlag == Up_Bt)
+    {
+        holdBtVrTimeUp = 25;
+        Ack_Bup = 0;
+        VrTimer1[holdButtonUp] = 0;
     }
 
     LCD_TaskPointer = &CmdInterpreter;
@@ -388,13 +444,21 @@ void ButtonSet_cmd()
 
     if (Ack_BSet == 0)
     {
+
         VrTimer1[holdButtonHome] = 0;
         Ack_BSet = 1;
+        Ack_reset = 1;
+
         if (Ack_PrAdj == 1)
         {
+            save_pr = 1;
             if (ObjSelectFlag == 0)
             {
-                ObjSelect = &Pr_PacketCopy[Pr_Index + Offset];
+                ObjSelect =
+                        (current_page != 13) ?
+                                (&Pr_PacketCopy[Pr_Index + Offset]) :
+                                (&maMotorSlected);
+
                 switch (current_page)
                 {
                 case pageNumEspresso1:
@@ -417,6 +481,15 @@ void ButtonSet_cmd()
                     ObjSelectStep = (uint32_t*) &stepTimesExtract;
                     ObjSelectMax = (uint32_t*) &MaxTimesExtract;
                     ObjSelectMin = (uint32_t*) &MinTimesExtract;
+                    break;
+
+                case 13:
+
+                    InMode_Mathtype = intMath;
+                    LoopValue = 1;
+                    ObjSelectStep = &maIncrease;
+                    ObjSelectMax = &maMax;
+                    ObjSelectMin = &maMin;
                     break;
                 case 14:
                 {
@@ -453,63 +526,40 @@ void ButtonSet_cmd()
                 ObjSelect = 0x00;
             }
         }
-    }
-    else // Ack_BSet == 1
-    {
-        if (VrTimer1[holdButtonHome] > 150 && Ack_reset == 0) // hold button set for change to page 0
+
+        if (current_page == 0)
         {
-            Ack_reset = 1;
-            VrTimer1[holdButtonHome] = ObjSelectFlag = 0;
-            if (current_page == 0)
-            {
-                current_page = 1;
-                HomePage = 0;
-            }
-            else
-            {
-                current_page = 0;
-                // Save parameter to eeprom
-                VrTimer1[displayBootPage] = 150; // VrTimer2 for display boot page
-                boostFlag = 1;
-                save_pr = 1;
-                NodeSelected = &Menu;
-
-            }
+            current_page = 1;
             page_change = 1;
-
+            HomePage = 0;
         }
         else
-            VrTimer1[holdButtonHome]++;
-    }
-    if (BsetFlag == Menu_Bt)
-    {
-        Ack_BSet = 0;
-        Ack_Return = 0;
-        Ack_Enter = Ack_reset = 0;
-        CmdDispatcher = &defaultcmd;
-    }
-    if (current_page != 0)
-    {
-        EnterNode();
-        ReturnNode();
+        {
+
+            if (ReadDownB)
+                EnterNode();
+            else
+                ReturnNode();
+        }
     }
 
 }
 void ButtonDown_cmd()
 {
-    static uint8_t holdBtVrTimeDown = 25;
-    if (BdownFlag == Down_Bt)
-    {
-        CmdDispatcher = &defaultcmd;
-        Ack_Bdown = 0;
-        VrTimer1[holdButtonDown] = 0;
-        holdBtVrTimeDown = 25;
-    }
+
+    /*    if (BdownFlag == Down_Bt)
+     {
+     CmdDispatcher = &defaultcmd;
+     Ack_Bdown = 0;
+     VrTimer1[holdButtonDown] = 0;
+     holdBtVrTimeDown = 25;
+     }*/
     if (current_page == 0)
         return;
     if (Ack_Bdown == 0)
     {
         Ack_Bdown = 1;
+        VrTimer1[holdButtonHome] = 0;
         if (ObjSelectFlag == 1)
         {
             switch (InMode_Mathtype)
@@ -529,7 +579,13 @@ void ButtonDown_cmd()
             {
                 _Bool lessThanMin_iValue = *ObjSelect <= *ObjSelectMin;
                 if (lessThanMin_iValue)
-                    break;
+                {
+                    if (LoopValue)
+                        *ObjSelect = *ObjSelectMax;
+                    else
+                        break;
+                }
+
                 *ObjSelect = *ObjSelect - *ObjSelectStep;
                 break;
             }
@@ -553,7 +609,8 @@ void ButtonDown_cmd()
                 Up_window_index = Pr_Index;
                 Down_window_index = Up_window_index - 3;
             }
-
+            uint8_t pageNum = 13;
+            //AckPrAdjIndex(0, pageNum);
         }
     }
     else
@@ -572,18 +629,19 @@ void ButtonDown_cmd()
 }
 void ButtonUp_cmd()
 {
-    static uint8_t holdBtVrTimeUp = 25;
-    if (BupFlag == Up_Bt)
-    {
-        holdBtVrTimeUp = 25;
-        CmdDispatcher = &defaultcmd;
-        Ack_Bup = 0;
-        VrTimer1[holdButtonUp] = 0;
-    }
+
+    /*    if (BupFlag == Up_Bt)
+     {
+     holdBtVrTimeUp = 25;
+     CmdDispatcher = &defaultcmd;
+     Ack_Bup = 0;
+     VrTimer1[holdButtonUp] = 0;
+     }*/
     if (current_page == 0)
         return;
     if (Ack_Bup == 0)
     {
+        VrTimer1[holdButtonHome] = 0;
         Ack_Bup = 1;
         if (ObjSelectFlag == 1)
         {
@@ -604,7 +662,12 @@ void ButtonUp_cmd()
             {
                 _Bool largerThanMin_iValue = *ObjSelect >= *ObjSelectMax;
                 if (largerThanMin_iValue)
-                    break;
+                {
+                    if (LoopValue)
+                        *ObjSelect = *ObjSelectMin;
+                    else
+                        break;
+                }
                 *ObjSelect = *ObjSelect + *ObjSelectStep;
                 break;
             }
@@ -627,7 +690,8 @@ void ButtonUp_cmd()
                 Down_window_index = Pr_Index;
                 Up_window_index = Down_window_index + 3;
             }
-
+            uint8_t pageNum = 13;
+           // AckPrAdjIndex(0, pageNum);
         }
     }
     else
@@ -650,17 +714,18 @@ void PageDisplay()
     {
         ObjSelect = (uint32_t*) &Pr_PacketCopy[calibWeightObj];
         ObjSelectStep = (uint32_t*) &LCD_Step_Calib;
-        ObjSelectMax = (uint32_t*) &InMode_MaxParameter[2];
-        ObjSelectMin = (uint32_t*) &InMode_MinParameter[2];
+        ObjSelectMax = (uint32_t*) &InMode_MaxParameter[5];
+        ObjSelectMin = (uint32_t*) &InMode_MinParameter[5];
         ObjSelectFlag = 1;
         calibWeightStr = HomePage = 0;
         current_page = 10;
         page_change = 1;
+        Ack_reset = 1;
         InMode_Mathtype = floatMath;
     }
     if (page_change == 1)
     {
-
+        LoopValue = 0;
         Pr_Index = 0;
         Down_window_index = 0;
         Up_window_index = 3;
@@ -696,7 +761,7 @@ void PageDisplay()
         case 1:
             PagePointer = &Page1_Display;
             Ack_PrAdj = 0;
-            NumOfPr = 4;
+            NumOfPr = 5;
             break;
         case 2:
             PagePointer = &Page2_Display;
@@ -728,6 +793,10 @@ void PageDisplay()
             Offset = 34;
             Ack_PrAdj = 1;
             NumOfPr = 2;
+            break;
+        case 13:
+            PagePointer = &PageManual_Display;
+            NumOfPr = 7;
             break;
         case 14:
             PagePointer = &Page10_Display;
@@ -842,6 +911,7 @@ void Page0_Display(void)
     {
         upload = 0;
         HomePage = 1;
+#ifdef debuglcd
         static float tempGui;
         if (VrTimer1[displayTemperature] >= 10)
         {
@@ -850,16 +920,15 @@ void Page0_Display(void)
         }
         else
             VrTimer1[displayTemperature]++;
-#ifdef debuglcd
 
         sprintf(Str_Temp, "%.1f", tempGui);     // hot water temperature
         Disp_Str_5x8_Image(7, 72, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-        //sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);  // extraction time
-        //Disp_Str_5x8_Image(7, 15, (uint8_t*) Str_Temp, LCD_IMAGE);
+        sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);  // extraction time
+        Disp_Str_5x8_Image(7, 15, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-        //sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]); // pulse volumeter
-        //Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
+        sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]); // pulse volumeter
+        Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
 #endif
         if (calibWeightFlag)
             Disp_Str_5x8_Image(5, 10, "Weight calibration", LCD_IMAGE);
@@ -912,13 +981,9 @@ void Page0_Display(void)
                 skip: Str_Display = LCD_String_Page0[id_Page0];
                 Disp_Str_8x16_Image(3, LCD_PosStr_page0[id_Page0],
                                     (uint8_t*) Str_Display);
-                // Display grind time
-                // sprintf(Str_Temp, "%.1f", tempGui);
-                // Disp_Str_5x8_Image(7, 82, (uint8_t*) Str_Temp, LCD_IMAGE);
-                // Display extraction time
-                sprintf(Str_Temp, "%.0f",
-                        *(float*) dataSentList[ExtractionTime]);
-                Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
+                ////////////////////////////////////////////////////////////////
+                DisplayInfoInProcess();
+                ////////////////////////////////////////////////////////////////
                 break;
             case 1: // Dang ve sinh
                 Str_Display = LCD_String_Page0[id_Page0];
@@ -964,7 +1029,6 @@ void Page0_Display(void)
             sprintf(Str_Temp, "%d", *dataSentList[cupsSpecial_2]);
             Disp_Str_5x8_Image(8, 99, (uint8_t*) Str_Temp,
                                (uint8_t*) LCD_IMAGE);
-
             Vertical_Display();
 
         }
@@ -977,14 +1041,18 @@ void Page1_Display(void)
     Str_Display = "CAI DAT: ";
     Disp_Str_5x8_Image(1, 45, (uint8_t*) Str_Display, LCD_IMAGE);
 
-    Str_Display = "Thong so: ";
+//Str_Display = "Thong so: ";
+    Str_Display = LCD_String_Page1[id];
     Disp_Str_5x8_Image(2, 2, (uint8_t*) Str_Display, LCD_IMAGE);
 // disp_bitmap(2,50,(uint8_t*)str);
-    Str_Display = "Canh bao: ";
+//Str_Display = "Canh bao: ";
+    Str_Display = LCD_String_Page1[id + 1];
     Disp_Str_5x8_Image(4, 2, (uint8_t*) Str_Display, LCD_IMAGE);
-    Str_Display = "Thong tin may: ";
+//Str_Display = "Thong tin may: ";
+    Str_Display = LCD_String_Page1[id + 2];
     Disp_Str_5x8_Image(6, 2, (uint8_t*) Str_Display, LCD_IMAGE);
-    Str_Display = "Thong tin loi: ";
+//Str_Display = "Thong tin loi: ";
+    Str_Display = LCD_String_Page1[id + 3];
     Disp_Str_5x8_Image(8, 2, (uint8_t*) Str_Display, LCD_IMAGE);
 //-----------------------------------------------------------
 // Display cursor
@@ -1241,8 +1309,8 @@ void Page10_Display(void)
     uint8_t objectIndexMintimeExtract = 37;
     sprintf(Str_Temp, "%d", Pr_PacketCopy[objectIndexMintimeExtract]);
     Disp_Str_5x8_Image(5, 30, (uint8_t*) Str_Temp, LCD_IMAGE);
-    //------------------------------------------------------------------------
-    // Display cursor
+//------------------------------------------------------------------------
+// Display cursor
     pointer_pos = (Pr_Index - id + 1) * 2 + 1;
     Page_Cursor_Display(1, pointer_pos);
 
@@ -1255,7 +1323,7 @@ void Page11_Display(void)
 //------------------------------------------------------------------------
     Str_Display = "Cai dat Nhiet do";
     Disp_Str_5x8_Image(1, 15, (uint8_t*) Str_Display, LCD_IMAGE);
-    //------------------------------------------------------------------------
+//------------------------------------------------------------------------
     Str_Display = "nuoc: ";
     Disp_Str_5x8_Image(2, 1, (uint8_t*) Str_Display, LCD_IMAGE);
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[HotWaterTemp]);
@@ -1267,7 +1335,7 @@ void Page11_Display(void)
     sprintf(Str_Temp, "%.1f",
             *((float*) &Pr_PacketCopy[objectIndexHotWaterSet]));
     Disp_Str_5x8_Image(2, 90, (uint8_t*) Str_Temp, LCD_IMAGE);
-    //------------------------------------------------------------------------
+//------------------------------------------------------------------------
     Str_Display = "Hoi: ";
     Disp_Str_5x8_Image(4, 1, (uint8_t*) Str_Display, LCD_IMAGE);
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[BoilerTemp]);
@@ -1279,31 +1347,115 @@ void Page11_Display(void)
     sprintf(Str_Temp, "%.1f", *((float*) &Pr_PacketCopy[objectIndexSteamSet]));
     Disp_Str_5x8_Image(4, 90, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-    //------------------------------------------------------------------------
+//------------------------------------------------------------------------
     Str_Display = "Coi:";
     Disp_Str_5x8_Image(6, 1, (uint8_t*) Str_Display, LCD_IMAGE);
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[GroupTemp]);
-    Disp_Str_5x8_Image(6, 85, (uint8_t*) Str_Temp, LCD_IMAGE);
+    Disp_Str_5x8_Image(6, 35, (uint8_t*) Str_Temp, LCD_IMAGE);
 
     Str_Display = "Run: ";
-    Disp_Str_5x8_Image(8, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+    Disp_Str_5x8_Image(6, 60, (uint8_t*) Str_Display, LCD_IMAGE);
     uint8_t objectIndexGroupDuty = 40;
     sprintf(Str_Temp, "%d", Pr_PacketCopy[objectIndexGroupDuty]);
-    Disp_Str_5x8_Image(8, 35, (uint8_t*) Str_Temp, LCD_IMAGE);
+    Disp_Str_5x8_Image(6, 90, (uint8_t*) Str_Temp, LCD_IMAGE);
 
     Str_Display = "Off: ";
-    Disp_Str_5x8_Image(8, 60, (uint8_t*) Str_Display, LCD_IMAGE);
+    Disp_Str_5x8_Image(8, 1, (uint8_t*) Str_Display, LCD_IMAGE);
     uint8_t objectIndexGroupShutdowDuty = 41;
     sprintf(Str_Temp, "%d", Pr_PacketCopy[objectIndexGroupShutdowDuty]);
-    Disp_Str_5x8_Image(8, 90, (uint8_t*) Str_Temp, LCD_IMAGE);
-    //------------------------------------------------------------------------
-    // Display cursor
+    Disp_Str_5x8_Image(8, 35, (uint8_t*) Str_Temp, LCD_IMAGE);
+//------------------------------------------------------------------------
+// Display cursor
 
     pointer_pos = (Pr_Index - id + 1) * 2;
     Page_Cursor_Display(6, pointer_pos);
 
 }
+void PageManual_Display(void)
+{
+    Str_Display = "Manual Control";
+    Disp_Str_5x8_Image(2, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+    char MotorStrDisplay[10], strsrc[32];
+    bool haveDirControl;
+    uint8_t id, pointer_pos;
+    id = Down_window_index;
+    switch (maMotorSlected)
+    {
+    case GrindMotorSelect:
+        sprintf(MotorStrDisplay, "%s", "xay");
+        haveDirControl = 1;
+        break;
+    case PressMotorSelect:
+        sprintf(MotorStrDisplay, "%s", "ep");
+        haveDirControl = 1;
+        break;
+    case PumpMotorSelect:
+        sprintf(MotorStrDisplay, "%s", "bom");
+        haveDirControl = 0;
+        break;
+    }
+
+    if (id == 0)
+    {
+        strcpy(strsrc, LCD_String_PageManual[id]);
+        strcat(strsrc, MotorStrDisplay);
+        Disp_Str_5x8_Image(3, 1, (uint8_t*) strsrc, LCD_IMAGE);
+    }
+    else
+    {
+        Str_Display = LCD_String_PageManual[id];
+        Disp_Str_5x8_Image(3, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+    }
+    Str_Display = LCD_String_PageManual[id + 1];
+    Disp_Str_5x8_Image(4, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+
+    Str_Display = LCD_String_PageManual[id + 2];
+    Disp_Str_5x8_Image(5, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+
+    Str_Display = LCD_String_PageManual[id + 3];
+    Disp_Str_5x8_Image(6, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+
+    uint8_t noteMsg = Pr_Index;
+    switch (noteMsg)
+    {
+    case 0:
+        if (haveDirControl)
+            Str_Display = "Push Re to CCW or Cl to CW";
+        else
+            Str_Display = "Push Re to run";
+        break;
+    case 1:
+    case 2:
+    case 3:
+        Str_Display = "Push Re to open valve";
+
+        break;
+    case 4:
+        Str_Display = "Push Re to test volumemeter";
+        break;
+    }
+    Disp_Str_5x8_Image(8, 1, (uint8_t*) Str_Display, LCD_IMAGE);
+    pointer_pos = (Pr_Index - id + 3);
+    Page_Cursor_Display(1, pointer_pos);
+}
+void ManualControlSelect(void)
+{
+    if (current_page == 13)
+    {
+        InManualTest = true;
+        if (Pr_Index == 0)
+            ManualObjSelected = maMotorSlected;
+        else
+        {
+            uint8_t offsetId_Manualtest = 2;
+            ManualObjSelected = Pr_Index + offsetId_Manualtest;
+        }
+    }
+    else
+        InManualTest = 0;
+}
 void pageWelcom_Display()
+
 {
 
     static bool i = 0;
@@ -1320,11 +1472,23 @@ void pageWelcom_Display()
         Disp_Str_5x8_Image(7, 45, (uint8_t*) Str_Display, LCD_IMAGE);
     }
 }
+static inline void DisplayInfoInProcess(void)
+{
+// Display grind time
+    sprintf(Str_Temp, "%.1f", *(float*) dataSentList[GrindTime]);
+    Disp_Str_5x8_Image(6, 25, (uint8_t*) Str_Temp, LCD_IMAGE);
+// Display preinfusion time
+    sprintf(Str_Temp, "%.1f", *(float*) dataSentList[PreinfusionTime]);
+    Disp_Str_5x8_Image(6, 65, (uint8_t*) Str_Temp, LCD_IMAGE);
+// Display extraction time
+    sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);
+    Disp_Str_5x8_Image(6, 105, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+}
 void DisplayError(void)
 {
     uint8_t i;
     static uint8_t imask = 0;
-
     if (Error)
     {
         if (VrTimer1[displayError] > 2)

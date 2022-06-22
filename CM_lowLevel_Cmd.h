@@ -34,6 +34,7 @@ typedef enum
     Cl_InsertPodClean,
     Cl_CompressPos2,
     Cl_Pumping1,
+    Cl_CompressPos3,
     Cl_ReturnHome2,
     Cl_Pumping2,
     Cl_FinishCLean,
@@ -48,7 +49,7 @@ typedef enum
     Wa_CompressPos2,
     Wa_ReturnHome2,
     Wa_FinishWarm
-}StepInWarmingBrewProcess;
+} StepInWarmingBrewProcess;
 StepInWarmingBrewProcess Wa_Step;
 
 typedef enum
@@ -66,8 +67,10 @@ StepInWarmingProcess Wm_Step;
 
 // Compress process
 
-#define dirCompress_M2 true
-#define dirReturnHome_M2 false
+#define dirCompress_M2          true
+#define dirCompressBack_M2      false
+
+#define dirReturnHome_M2        false
 #define ReleasePressure 1
 
 // stepPos1 - grindpos
@@ -76,7 +79,7 @@ StepInWarmingProcess Wm_Step;
 // stepPos4 - pos-compress
 // stepPos5 - pos-extraction
 uint32_t pos1 = 118, pos2 = 149;  // position for compress process
-uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 800, stepPos4 = 80,
+uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 800, stepPos4 = 200,
         stepPos5 = 100; // Extract Pos  //600
 // unit X (mm) * 100 = stepPos
 
@@ -99,12 +102,13 @@ uint32_t speedTemp, defaulSpeed = 11000;
 uint32_t speedgrind = 50000;
 
 // Coffee extraction time
-uint32_t CoffeeExtractionTime;
-extern float Gui_CoffeExtractionTime;
-extern uint8_t countGrounds;
-extern bool fullOfGroundsDrawer;
-bool triggerCount_ExtractionTime;
 
+extern float Gui_CoffeeExtractionTime, Gui_CoffeePreinfusionTime,
+        Gui_CoffeeGrindTime;
+extern uint8_t countGrounds;
+extern bool fullOfGroundsDrawer, PreGrindFlag;
+bool triggerCount_ExtractionTime, triggerCount_PreinfusionTime;
+uint32_t CoffeeExtractionTime, CoffeePreinfusionTime;
 extern float vel;
 uint32_t sp1 = 2900;
 uint32_t sp2 = 3200;
@@ -115,7 +119,7 @@ uint32_t sp3 = 3400;
 float infu = 2, infu_cl = 60;
 uint32_t speedstep = 12000;
 uint32_t ppo;
-float ppi = 0;
+
 float buffervel[8], tempv, avgvel;
 
 #define timeRinse 6
@@ -124,14 +128,15 @@ extern uint8_t idModeRunning;
 extern uint16_t *CountDataStorage[];
 
 uint8_t TargetTest;
-float  speedPumpTest;
-bool dirGrindTest, InModuleTest, TestModuleTrigger;
+float speedPumpTest;
+bool dirGrindTest, dirCompressTest, InModuleTest, TestModuleTrigger;
 
 #define PosExtract 1
 
 void ModuleTest(void);
 void CheckFinsih_ModuleTest(void);
 void ModuleTestMachine(void);
-
+#define Timming(x)  ((x)/0.02f)
+float ManualRun_DutyPump;
 
 #endif /* CM_LOWLEVEL_CMD_H_ */

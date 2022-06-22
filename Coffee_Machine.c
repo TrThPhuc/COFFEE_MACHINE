@@ -66,6 +66,30 @@ __error__(char *pcFilename, uint32_t ui32Line)
 #define Reset_All                       6
 // Address store in  EEPROM @ offset from 0x400AF000
 #define AddDataEeprom   0x00
+#define RINSEMODE   1
+#define CLEANMODE   0
+#define  ModeInterpreter( _Mode,  _Led, _IdMSg, _maskCompress)                           \
+do                                                                                      \
+{                                                                                       \
+    uint8_t frameOfEachMode = 8, grindObjIndex = 5;                                     \
+    ModeSelected = _Mode;                                                               \
+ledBlink = _Led;                                                                        \
+idModeRunning = _IdMSg;                                                                 \
+mode_str = true;                                                                        \
+release_mode = 0;                                                                       \
+calibWeightObj = (ModeSelected->IndexMode) * frameOfEachMode + grindObjIndex;           \
+MaskExtraCompress = _maskCompress;                                                      \
+}while(0)
+
+#define CleanInterpreter(_isRinseMode, _Led, _IdMSg)                \
+do                                                                  \
+{                                                                   \
+    clModeRinse = _isRinseMode;                                     \
+    ledBlink = _Led;                                                \
+    idModeRunning = _IdMSg;                                         \
+    release_CleanB = 0;                                             \
+}while(0)
+
 // Constant string
 char BrandName[16] = "STAR X";
 char ModelName[24] = "Special Auto";
@@ -88,7 +112,8 @@ uint8_t coefSteam_change, coefHotWater_change;
 float Steam_Temperature_Ref, Steam_Vout;
 float HotWater_Temperature_Ref, HotWater_Vout;
 float Extrude_Vout = 40;
-float Gui_TempSteam, Gui_HotWaterSteam, Gui_CoffeExtractionTime, CountSteam;
+float Gui_TempSteam, Gui_HotWaterSteam, CountSteam;
+float Gui_CoffeeExtractionTime, Gui_CoffeePreinfusionTime, Gui_CoffeeGrindTime;
 extern _Bool ErHotWater;
 CNTL_2P2Z_Terminal_t Steam_CNTL, HotWater_CNTL;
 CNTL_PID_DCL_Terminal_t HotWater_PID_DCL;
@@ -129,10 +154,11 @@ uint8_t *LCD_IMAGE_Send, *LCD_IMAGE_Write;
 extern _Bool HomePage;
 extern uint8_t idModeRunning, idPage0Display[8];
 extern volatile uint8_t pagelcd;
+
 //////////////////////////////////////////////////
 uint16_t counttest, countcup = 1102; // just used for test
 uint8_t VrHoldMsg;
-_Bool HoldMsgFlag, HoldCmd;
+_Bool HoldMsgFlag, HoldCmd, PreReadLcdBt = 0;
 // ---------------------------- ADS1118 Temperature Sensor & Heating ------------------------------------
 ADS1118_t Steam, Hot_Water;
 void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS1118
@@ -147,7 +173,8 @@ extern uint16_t ui16TxBuf[];
 extern uint16_t ui16RxBuf[];
 uint16_t volatile Settingconfig;
 extern _Bool HeatingHotwater, HeatingSteam;
-extern _Bool ErHotWaterTimeOut, ErSteamTimeOut, ErOutletDetect;
+extern _Bool ErHotWaterTimeOut, ErSteamTimeOut, ErOutletDetect, ErPumpSteam;
+
 // ---------------------------- TCA9539 IO Expander Module --------------------------------------
 TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;
 TCA9539Regs *TCA9539_IC[3] = { &TCA9539_IC1, &TCA9539_IC2, &TCA9539_IC3 };
@@ -198,6 +225,7 @@ void (*C_Group_Task)(void); // 100ms Task
 void (*D_Group_Task)(void); // 500ns Task
 
 uint16_t Vr_C2Task, Vr_ErrorClear;
+uint16_t ledBlink = 0, VrBlinkLed, BtModeStr;
 void A_Base(void);
 void B_Base(void);  // Monitor machine
 void C_Base(void);
@@ -214,19 +242,7 @@ void C1(void);
 void C2(void);
 
 void D1(void);
-
-#define  ModeInterpreter( _Mode,  _Led, _Id, _maskCompress)                     \
-do                                                                              \
-{                                                                               \
-    uint8_t frameOfEachMode = 8, grindObjIndex = 5;                             \
-    ModeSelected = _Mode;                                                       \
-    TCA9539_IC1.TCA9539_Onput.all |= _Led;                                      \
-    idModeRunning = _Id;                                                        \
-    mode_str = true;                                                            \
-    release_mode = 0;                                                           \
-    calibWeightObj = (ModeSelected ->IndexMode) * frameOfEachMode + grindObjIndex;     \
-    MaskExtraCompress =  _maskCompress;                                         \
-}while(0)
+void BlinkModeLed(void);
 
 uint16_t parameter[10] = { };
 extern void MakeCoffee(void);
@@ -245,11 +261,12 @@ extern inline void HoldMotorOff(void);
 extern void CheckFinsih_ModuleTest(void);
 extern void SaveCountToEeprom(void);
 extern ModuleTestMachine(void);
-
+extern void ManualControlSelect(void);
+extern void ManualControlTest(void);
 _Bool SaveDefautCount = 0;
 extern bool clModeRinse;
 extern bool InProcess, InCleanning, InStartUp, InWarming, calibWeightFlag,
-        calibWeightStr;
+        calibWeightStr, InManualTest;
 extern bool InModuleTest;
 extern uint8_t calibWeightObj;
 bool idleMachine, p_idleMachine, fullOfGroundsDrawer, Suf_HotWater,
@@ -274,12 +291,12 @@ uint32_t sp = 2000, dd, ss = 0;
 
 void main(int argc, char **argv)
 {
-    // Initialize Device/board include:
-    // + Enalbe FPU and lazy stacking
-    // + Disable Wdog timer, Disable interrupt
-    // + System clk, Enable peripheral clock
-    // + Initialize timers
-    // + GPIO init
+// Initialize Device/board include:
+// + Enalbe FPU and lazy stacking
+// + Disable Wdog timer, Disable interrupt
+// + System clk, Enable peripheral clock
+// + Initialize timers
+// + GPIO init
     FPUEnable();
     FPULazyStackingEnable();
     IntMasterDisable();
@@ -292,7 +309,7 @@ void main(int argc, char **argv)
         ;
 #endif
     EEPROMInitStastus = EEPROMInit();
-    // Recovery Eeprom
+// Recovery Eeprom
 #ifdef DEBUG
     if(EEPROMInitStastus != EEPROM_INIT_OK){
         printf("Error initalize Eeprom");
@@ -313,7 +330,7 @@ void main(int argc, char **argv)
 
     Steam.Code = ADSCON_CH0; // Assign code channel 0 ADS1118 temperature sensor
     Steam.Actual_temperature = 0;
-    //Temperature Control terminal assign - Steam
+//Temperature Control terminal assign - Steam
     CNTL_2P2Z_DBUFF_t Default = { 0, 0, 0, 0, 0 };
     Steam_CNTL.DBUFF = Default;     // Internal buffer
     Steam_CNTL.Ref = &Steam_Temperature_Ref; //Desired temperature(reference signal)
@@ -327,11 +344,11 @@ void main(int argc, char **argv)
 
     Hot_Water.Code = ADSCON_CH1; // Assign code channel 0 ADS1118 temperature sensor
     Hot_Water.Actual_temperature = 0;
-    //Temperature Control terminal assign - Hot water tank
+//Temperature Control terminal assign - Hot water tank
     HotWater_CNTL.DBUFF = Default; // Internal buffer
     HotWater_CNTL.Ref = &HotWater_Temperature_Ref; //Desired temperature(reference signal)
     HotWater_CNTL.Fdbk = &Hot_Water.Actual_temperature; // Acutal temperature(feedback signal)
-    //HotWater_CNTL.Out = &HotWater_Vout; // Contol output
+//HotWater_CNTL.Out = &HotWater_Vout; // Contol output
 
     PID_DCL_DBUFF_t DCL_Defualt = { 0, 0, 0, 0 };
     HotWater_PID_DCL.DUFF_Str = DCL_Defualt;
@@ -384,9 +401,9 @@ void main(int argc, char **argv)
 
 // ---------------------------------------------------------------------------------
 #if(BOARD == 1)
-    // Configure I2C interface for Communicate with TCA9539
+// Configure I2C interface for Communicate with TCA9539
     I2C0_TCA9539_Configuration();
-    // Configure GPIO interrupt to respone intertupt signal of TCA9539
+// Configure GPIO interrupt to respone intertupt signal of TCA9539
     I2C0_TCA9539_IterruptTrigger_Cnf(); // GPIO interrupt PB1
 #endif
 
@@ -402,11 +419,11 @@ void main(int argc, char **argv)
 //=================================================================================
     LCD_Interface_Cnf(); // SPI & I/O configruation
     LCD_ST7567_Init();   // LCD initialize
-    // Initialize GUI interface
+// Initialize GUI interface
     SerialCommsInit();
     uint32_t count1sForVrTImer = 15;
     VrTimer1[displayTemperature] = count1sForVrTImer;
-    // Assign data stream to Gui variable display LCD - Display on Page 0 LCD
+// Assign data stream to Gui variable display LCD - Display on Page 0 LCD
     dataSentList[cupsEspresso_1] = &Mode_Espresso_1.Cups;
     dataSentList[cupsEspresso_2] = &Mode_Espresso_2.Cups;
 
@@ -421,7 +438,7 @@ void main(int argc, char **argv)
     dataSentList[ExtractBtimes] = (uint16_t*) &ExtractB;
 
     dataSentList[HotWaterTemp] = (uint16_t*) &Gui_HotWaterSteam;
-    dataSentList[ExtractionTime] = (uint16_t*) &Gui_CoffeExtractionTime;
+    dataSentList[ExtractionTime] = (uint16_t*) &Gui_CoffeeExtractionTime;
 
     dataSentList[tempExtrude] = (uint16_t*) &MilliLitresBuffer;
 
@@ -431,8 +448,10 @@ void main(int argc, char **argv)
     dataSentList[ProductDate] = (uint16_t*) &ProductDateStr;
     dataSentList[GroupTemp] = (uint16_t*) &Group_Temp;
     dataSentList[BoilerTemp] = (uint16_t*) &Gui_TempSteam;
+    dataSentList[PreinfusionTime] = (uint16_t*) &Gui_CoffeePreinfusionTime;
+    dataSentList[GrindTime] = (uint16_t*) &Gui_CoffeeGrindTime;
 
-    //"Set" variables
+//"Set" variables
 //===================================================================================
     ParameterDefaultSetting();
 
@@ -442,7 +461,7 @@ void main(int argc, char **argv)
     AssignParameterForMode(&Mode_Special_2, Pr_Packet);
 
     AssignGobalParSetting(Pr_Packet);
-    // Assign direction motor of grind module
+// Assign direction motor of grind module
 
     Mode_Espresso_1.DirGrinding = Mode_Espresso_2.DirGrinding = true;
     Mode_Special_1.DirGrinding = Mode_Special_2.DirGrinding = false; // true
@@ -458,21 +477,21 @@ void main(int argc, char **argv)
     CountDataStorage[BladeR] = &BladeB;
     CountDataStorage[RonTimes] = &Ron;
     AssignErrorList();
-    // Read EEPROM memory
+// Read EEPROM memory
 
 #ifdef SaveEeprom
     IntMasterDisable();
     uint32_t tempt32DataRead[NumberOfParameter];
     uint32_t *ui32Ptr = (uint32_t*) tempt32DataRead;
     uint8_t i = 0;
-    //----------------------------------------------------------------------------------------//
+//----------------------------------------------------------------------------------------//
     EEPROMRead(tempt32DataRead, AddDataEeprom, NumberOfParameter * 4);
-    // Attract 32 bit packet to 16 bit packet and initalize to system parameter;
+// Attract 32 bit packet to 16 bit packet and initalize to system parameter;
     for (i = 0; i < NumberOfParameter; i++)
     {
         *Pr_Packet[i] = ui32Ptr[i];
     }
-    //----------------------------------------------------------------------------------------//
+//----------------------------------------------------------------------------------------//
 
     if (SaveDefautCount)
     {
@@ -512,11 +531,11 @@ void main(int argc, char **argv)
     TCA9539Init(&TCA9539_IC2);
     TCA9539Init(&TCA9539_IC1);
 #endif
-    // Enable Control temerature of steam and Hotwater tank
+// Enable Control temerature of steam and Hotwater tank
     PWMSSR1Enable = 1;
     PWMSSR2Enable = 1;
     PWMSSR3Enable = 1;
-    //FPUDisable();
+//FPUDisable();
 #ifdef VelGrindDebug
     InitFeedbackVel();
 #endif
@@ -587,15 +606,16 @@ void D_Base(void)
 void A1(void)
 {
 // Communicate and display LCD
-    SerialHostComms();  // period 3 task
+    if (PreReadLcdBt)
+        SerialHostComms();  // period 3 task
     A_Group_Task = &A2;
-
 }
 // Task 2ms - Read input from extend GPIO ic TC9539
 void A2(void)
 {
 #if(BOARD == 1)
 // When signal change TCA595 wil generate interrupt and  ISR will set ReadCmdFlag
+    PreReadLcdBt = 1;
     if (TCA9539_IC1.ReadCmdFlag && !I2CMasterBusBusy(I2C0_BASE))
         Cmd_WriteMsg((void (*)(void*)) TCA9539ReadInputReg,
                      (void*) &TCA9539_IC1);
@@ -693,56 +713,41 @@ void C1(void)
     static uint8_t release_mode = 1, release = 0, release_CleanB = 1,
             release_WarmingB = 1;
     static _Bool mode_str;
-    static uint32_t Vrtimer;
+    static uint32_t Vrtimer_HoldCalibWeigh;
 
 // ---------------------------------------- Button cofffee maker & GUI ------------------------------//
 // Select mode and make coffe
     if (release_mode == 1)
     {
+        uint8_t id_MsgPage0;
         if ((TCA9539_IC1.TCA9539_Input.all & Special1_Bt) == 0)
         {
-            ModeInterpreter(&Mode_Special_1, LED_BT5, 7, false);
+            id_MsgPage0 = 7;
+            ModeInterpreter(&Mode_Special_1, LED_BT5, id_MsgPage0, false);
 
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Special2_Bt) == 0)
         {
-
-            ModeInterpreter(&Mode_Special_2, LED_BT7, 8, true);
+            id_MsgPage0 = 8;
+            ModeInterpreter(&Mode_Special_2, LED_BT7, id_MsgPage0, true);
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso1_Bt) == 0)
         {
-
-            ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, false);
+            id_MsgPage0 = 5;
+            ModeInterpreter(&Mode_Espresso_1, LED_BT4, id_MsgPage0, false);
         }
         else if ((TCA9539_IC1.TCA9539_Input.all & Expresso2_Bt) == 0)
         {
-            ModeInterpreter(&Mode_Espresso_2, LED_BT6, 6, true);
+            id_MsgPage0 = 6;
+            ModeInterpreter(&Mode_Espresso_2, LED_BT6, id_MsgPage0, true);
         }
-        /*        uint16_t moderead = TCA9539Regs_Read16Pin(&TCA9539_IC1,
-         Special1_Bt | Special2_Bt | Expresso1_Bt | Expresso2_Bt);
-         switch (moderead)
-         {
-         case Special1_Bt:
-         ModeInterpreter(&Mode_Special_1, LED_BT5, 7, 18);
-         break;
-         case Special2_Bt:
-         ModeInterpreter(&Mode_Special_2, LED_BT7, 8, 26);
-         break;
-         case Expresso1_Bt:
-         ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, 2);
-         break;
-         case Expresso2_Bt:
-         ModeInterpreter(&Mode_Espresso_1, LED_BT4, 5, 2);
-         break;
-         default:
-         break;
-         }*/
 
     }
     // If push and release Mode_button will make coffee
     if (mode_str && (release_mode == 1))
     {
-        if (calibWeightFlag)
+
+        if (calibWeightFlag && HomePage)
             MakeCoffee();
         else if (EnMakeCoffee)
         {
@@ -758,23 +763,32 @@ void C1(void)
 // ---------------------------------------- Button Cleanning & GUI ------------------------------//
     if ((release_CleanB == 1) && (EnMakeCoffee == 1))
     {
-        // Cleanning complete machine
+// Cleanning complete machine
         if ((TCA9539_IC1.TCA9539_Input.all & Clean_Bt) == 0)
         {
-            TCA9539_IC1.TCA9539_Onput.all |= LED_BT9;
-            idModeRunning = 2;
+            //TCA9539_IC1.TCA9539_Onput.all |= LED_BT9;
+            /*            ledBlink = LED_CLEAN;
+             idModeRunning = 2;
+             CleanningMachine();
+             clModeRinse = 0;
+             release_CleanB = 0;*/
+            CleanInterpreter(CLEANMODE, LED_CLEAN, 2);
             CleanningMachine();
-            clModeRinse = 0;
-            release_CleanB = 0;
 
         }
-        // Rinse
+// Rinse
         if ((TCA9539_IC1.TCA9539_Input.all & Rinse_Bt) == 0)
         {
-            idModeRunning = 1;
+            //TCA9539_IC1.TCA9539_Onput.all |= LED_BT8;   // BT8
+            /*            ledBlink = LED_RINSE;
+             idModeRunning = 1;
+             CleanningMachine();
+             clModeRinse = 1;
+             release_CleanB = 0;
+             */
+            CleanInterpreter(RINSEMODE, LED_RINSE, 1);
             CleanningMachine();
-            clModeRinse = 1;
-            release_CleanB = 0;
+
         }
 
     }
@@ -786,7 +800,7 @@ void C1(void)
 
             cancel_cmd = 1;
             release = 0;
-            TCA9539_IC1.TCA9539_Onput.all |= LED_BT8;   // BT8
+
         }
     }
     if ((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) == 0)
@@ -804,39 +818,40 @@ void C1(void)
     }
 
 //----------------------------------------------------Release Button left Pannel-------------------------------------
-    if ((TCA9539_IC1.TCA9539_Input.all & 0x78) == 0x78)
+    bool ModeSelecBttRelease =
+            ((TCA9539_IC1.TCA9539_Input.all & Release_Mode_Bt)
+                    == Release_Mode_Bt);
+    if (ModeSelecBttRelease)
     {   // all button make coffe release
         release_mode = 1;
         if (InProcess == 0)
-        {
-
-            TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT4 | LED_BT5 | LED_BT6
-                    | LED_BT7);
-        }
-        Vrtimer = 0;
+            TCA9539Regs_Write16Pin(&TCA9539_IC1,
+                                   (LED_BT4 | LED_BT5 | LED_BT6 | LED_BT7),
+                                   true);
+        Vrtimer_HoldCalibWeigh = 0;
     }
     else
-        Vrtimer++;
-    if ((Vrtimer > 25) && (calibWeightFlag == 0) && HomePage)
+        Vrtimer_HoldCalibWeigh++;
+    if ((Vrtimer_HoldCalibWeigh > 25) && (calibWeightFlag == 0) && HomePage)
     {
         calibWeightFlag = 1;
-        Vrtimer = 0;
+        Vrtimer_HoldCalibWeigh = 0;
     }
 
 //--------------------------------Release Button Right Pannel-------------------------------------
-    // Button cancel release
+// Button cancel release
     if ((TCA9539_IC1.TCA9539_Input.all & Cancel_Task) != 0)
     {
         release = 1;
         Vr_ErrorClear = 0;
-        TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT8 | LED_BT9);
     }
     // Button clean release
-    if (((TCA9539_IC1.TCA9539_Input.all & (Clean_Bt | Rinse_Bt)) != 0x84)
-            && (InCleanning == 0))            // Button cancel release
+    bool CleanAndRinseBtRelease = ((TCA9539_IC1.TCA9539_Input.all
+            & (Clean_Bt | Rinse_Bt)) == Release_Clean_Bt);
+    if (CleanAndRinseBtRelease && (InCleanning == 0))   // Button cancel release
     {
         release_CleanB = 1;
-        TCA9539_IC1.TCA9539_Onput.all &= ~(LED_BT8 | LED_BT9);
+        TCA9539_IC1.TCA9539_Onput.all |= (LED_CLEAN | LED_RINSE);
     }
     if (TCA9539Regs_Read16Pin(&TCA9539_IC2, Warming_Bt) != 0)
     {
@@ -853,13 +868,13 @@ void C2(void)
     static _Bool PumpStr = false;
 
 #if(WarmingMethod == SteamWarming)
-    if (En)
-        (Vr_C2Task >= 300) ?
-                (Cmd_WriteMsg(WarmingPressMachine, NULL), Vr_C2Task = 0) :
-                (Vr_C2Task++); //Cmd_WriteMsg(WarmingPressMachine, NULL)
+if (En)
+(Vr_C2Task >= 300) ?
+(Cmd_WriteMsg(WarmingPressMachine, NULL), Vr_C2Task = 0) :
+(Vr_C2Task++); //Cmd_WriteMsg(WarmingPressMachine, NULL)
 #endif
 // Start pumping water to steam tank
-    if (fADC_LevelSensor > (float) HighLvSensor)
+    if (fADC_LevelSensor > (float) HighLvSensor && !ErPumpSteam)
     {
         if (InLevelPumping == 0 && p_idleMachine)
         {
@@ -869,7 +884,7 @@ void C2(void)
         Hyteresis = 1;
     }
     // Stop pumping water to steam tank
-    else if (fADC_LevelSensor < (float) LowLvSensor)
+    else if (fADC_LevelSensor < (float) LowLvSensor || ErPumpSteam)
     {
         if (InLevelPumping == 1)
         {
@@ -882,57 +897,39 @@ void C2(void)
     }
     if (PumpStr)
     {
+// Release presure after pump to boiler
         (VrRelease >= 12) ? (PumpStr = 0, TCA9539Regs_Write16Pin(&TCA9539_IC2,
         Valve_5,
                                                                  false)) :
                             (VrRelease++);
     }
-    if ((fADC_LevelSensor >= (float) 0.85) && (fADC_LevelSensor <= (float) 2.2))
-    {
-        if (Gui_TempSteam >= 110)
-        {
-            (CountSteam >= 900) ? (SteamReady = 1) : CountSteam++;
+#if(WarmingMethod == SteamWarming)
+if ((fADC_LevelSensor >= (float) 0.75) && (fADC_LevelSensor <= (float) 2.5))
+{
+if (Gui_TempSteam >= 110)
+{
+    (CountSteam >= 900) ? (SteamReady = 1) : CountSteam++;
 
-        }
-        else
-        {
-            CountSteam = 0;
-            SteamReady = 0;
-        }
+}
+else
+{
+    CountSteam = 0;
+    SteamReady = 0;
+}
 
-    }
-    else
-        SteamReady = 0;
-
-    /*    if (coefSteam_change)
-     {
-     CNTL_Pole_Zero_Cal(&Steam_CNTL, Pgain_Steam, Igain_Steam, Dgain_Steam,
-     7999, -10, 0);
-     coefSteam_change = 0;
-     }
-     if (coefHotWater_change)
-     {
-     CNTL_Pole_Zero_Cal(&HotWater_CNTL, Pgain_HotWater, Igain_HotWater,
-     Dgain_HotWater, Dmax_HotWater, -10, 0);
-     coefHotWater_change = 0;
-     }*/
-    /*
-     if (Hot_Water.Actual_temperature >= (HotWater_Temperature_Ref - 4))
-     {
-     HotWater_CNTL.Coef.a1 = m;
-     }
-
-     else
-     {
-     HotWater_CNTL.Coef.a1 = 1;
-     }
-     */
-
+}
+else
+SteamReady = 0;
+#endif
+    BlinkModeLed();
     C_Group_Task = &C1;
 }
 // Monitor machine
 void D1(void)
 {
+//================================== Manual Control & Test ===============================
+    ManualControlSelect();
+    ManualControlTest();
 //================================== Hold motor off when not used ================================
     HoldMotorOff();
 //================================== Blink Error ==================================================
@@ -943,17 +940,17 @@ void D1(void)
 
 // Detect Coffee out error
 #if(Outlet == SensorOutlet)
-    if (p_idleMachine)
-    {
-        if ((TCA9539_IC3.TCA9539_Input.all & OutletSensor) == 0)
-        {
-            (eVrTimer[eVrCoffeOutlet] > 40) ? // If never detect in 5s full extraction stage will error
-            (ErOutletDetect = true, eVrTimer[eVrCoffeOutlet] = 0) : (eVrTimer[eVrCoffeOutlet]++);
-        }
-        else
-            eVrTimer[eVrCoffeOutlet] = 0;
+if (p_idleMachine)
+{
+if ((TCA9539_IC3.TCA9539_Input.all & OutletSensor) == 0)
+{
+    (eVrTimer[eVrCoffeOutlet] > 40) ? // If never detect in 5s full extraction stage will error
+    (ErOutletDetect = true, eVrTimer[eVrCoffeOutlet] = 0) : (eVrTimer[eVrCoffeOutlet]++);
+}
+else
+eVrTimer[eVrCoffeOutlet] = 0;
 
-    }
+}
 #endif
 //================================== Detect error heating  hotwater ==========================
 
@@ -1003,6 +1000,16 @@ void D1(void)
         eVrTimer[eVrSteamHeatingTimeOut] = 0;
         ErSteamTimeOut = false;
     }
+    if (InLevelPumping)
+    {
+        if (eVrTimer[eVrSteamHeatingTimeOut] >= 310)
+        {
+            ErPumpSteam = true;
+
+        }
+        else
+            eVrTimer[eVrSteamHeatingTimeOut]++;
+    }
 
 //=================================== Machine status =============================================
 #ifndef debug
@@ -1013,7 +1020,7 @@ void D1(void)
     else
         Suf_HotWater = 0;
     idleMachine = !(InProcess || InStartUp || InCleanning || InLevelPumping
-            || InWarming);
+            || InWarming || InManualTest);
     p_idleMachine = !(InProcess || InCleanning);
 #if(WarmingMethod == HeatingResWarming)
     /*
@@ -1044,7 +1051,7 @@ void D1(void)
 #endif
 //================================ Message id to lcd =============================================
     Id_Msg_flag = fullOfGroundsDrawer || !idleMachine || Error || En;
-    // Delay display when finish extract
+// Delay display when finish extract
     if ((!InProcess) && HoldCmd)
         (VrHoldMsg > 15) ?
                 (HoldMsgFlag = false, HoldCmd = false) : (HoldMsgFlag =
@@ -1150,6 +1157,19 @@ void ClearError(void)
     uint8_t i;
     for (i = 0; i < 16; i++)
         *ErrorMachine[i].ErrorFlag = false;
+
+}
+void BlinkModeLed(void)
+{
+    if (!(InProcess || InCleanning))
+        return;
+    if (VrBlinkLed >= 10)
+    {
+        TCA9539_IC1.TCA9539_Onput.all ^= ledBlink;
+        VrBlinkLed = 0;
+    }
+    else
+        VrBlinkLed++;
 
 }
 void WatchdogIntHandler(void)

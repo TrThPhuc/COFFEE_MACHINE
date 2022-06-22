@@ -39,7 +39,7 @@ extern CNTL_2P2Z_Terminal_t Steam_CNTL;
 extern _Bool InPumping;
 TCA9539Regs TCA9539_IC3;
 extern void Pumping_Process_Stop(void *PrPtr);
-extern float Gui_CoffeExtractionTime;
+extern float Gui_CoffeeExtractionTime;
 void FlowMeterCal(void);
 extern _Bool InCleanning;
 //static float v1, v2;
@@ -85,12 +85,12 @@ void FlowMeterCal()
         QEIIntClear(QEI0_BASE, QEI_INTTIMER);
         MilliLitresBuffer = (float) QEIPositionGet(QEI0_BASE);
         // Calculate the vollume pumping
-        if (Gui_CoffeExtractionTime > wExtract_MaxTime)
+        if (Gui_CoffeeExtractionTime > wExtract_MaxTime)
         {
             Pumping_Process_Stop(Null);
             return;
         }
-        if ((Gui_CoffeExtractionTime > wExtract_MinTime) || InCleanning)
+        if ((Gui_CoffeeExtractionTime > wExtract_MinTime) || InCleanning)
         {
             if ((MilliLitresBuffer >= SetVolume * Dec) && (posspeed == false))
             {
