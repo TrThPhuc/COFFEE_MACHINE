@@ -35,15 +35,15 @@ extern TCA9539Regs TCA9539_IC1;
 // System Defines
 //---------------------------------------------------------------
 #define Kernel_LCD_pr
-#define NumOfPage       9
+#define NumOfPage       10
 #define InitPageDisplay 3
 #define AddDataEeprom   0x00
 
 //#define debuglcd
 //------------------------------- Status machine --------------------------------
-extern _Bool Error;
+extern _Bool Error, WarningFlag;
 
-extern Error_t ErrorMachine[16];
+extern Error_t ErrorMachine[16], WarningMachine[5];
 
 //#define uDma_SSI0
 // ---------------------Shared function prototypes of Interface LCD -------------------------------
@@ -116,6 +116,7 @@ void defaultcmd(void);
 void pageWelcom_Display(void);
 void Page_Cursor_Display(uint8_t page, uint8_t pos);   // Display cursor
 void DisplayError(void);
+void DisplayWarning(void);
 void PageManual_Display(void);
 static inline void DisplayInfoInProcess(void);
 inline void PrintNum(MathType typePar, _Bool cur, void *Num);
@@ -153,7 +154,8 @@ bool LoopValue = false;
 uint8_t ObjSelectFlag = 0;
 
 uint8_t current_page = 0, page_change = 1, layer = 0;
-uint8_t CursorPosCol[NumOfPage] = { 124, 90, 80, 95, 124, 124, 124, 124, 124 };
+uint8_t CursorPosCol[NumOfPage] =
+        { 124, 90, 80, 95, 124, 124, 124, 124, 124, 50 };
 
 // Acknowledge Button event
 int8_t Ack_BSet = 0, Ack_Bdown = 0, Ack_Bup = 0, Ack_Enter = 0, Ack_Return = 0,
@@ -198,7 +200,7 @@ uint32_t maMotorSlected, maIncrease = 1, maMax = 3, maMin;
 _Bool boostFlag = 1, HomePage = 0;
 char *Str_Display;
 char Str_Temp[16];
-char Str_ErrorNum[10];
+char Str_ErrorNum[10], Str_WarningNum[10];
 char CurStr[3] = " <";
 uint8_t blinkCurVr;
 _Bool blinkCur;
@@ -218,23 +220,24 @@ char *LCD_String_Page2[10] = { "Espresso 1 ly", "Espresso 2 ly",
                                "Nhiet do" };
 
 char *LCD_String_PageManual[] = { "Motor ", "Valve Brew", "Valve CoffeeOut",
-                                  "Valve BackRinse", "Valve Drain",
-                                  "Valve SteamIn", "VolumeMeter" };
+                                  "Valve BackRinse", "Valve SteamIn",
+                                  "Valve Drain", "VolumeMeter" };
 
-char *LCD_String_Page0[16] = { "Da san sang", "Dang ve sinh",
-                               "Tha thuoc ve sinh", "Dang ve sinh", "thuoc",
-                               "Espresso", "Espresso", "Special", "Special",
-                               "Dang khoi dong", "Ve sinh", "hoc dung ba",
-                               "Ma Loi:", " Dang ngam coi" };
+char *LCD_String_Page0[16] =
+        { "Da san sang", "Dang ve sinh", "Tha thuoc ve sinh",
+          "Dang ve sinh thuoc", "thuoc", "Espresso", "Espresso", "Special",
+          "Special", "Dang khoi dong", "Do hoc ba", "hoc dung ba", "Ma Loi:",
+          " Dang ngam coi", "Wr:" };
 uint8_t id_Page0 = 0xFF, idModeRunning, idPage0Display[8];
-char LCD_PosStr_page0[16] = { 34, 32, 15, 32, 55, 16, 8, 20, 10, 24, 46, 35, 10,
-                              30 };
+char LCD_PosStr_page0[16] = { 34, 32, 15, 10, 55, 16, 8, 20, 10, 24, 35, 35, 5,
+                              25 };
 MathType Int_Format_parameter[NumOfParInEachMode] = { intMath, intMath,
                                                       boolMath, floatMath,
                                                       intMath, floatMath,
                                                       intMath };
 MathType Int_Format_TempParameter[NumOfParTemperature] = { floatMath, floatMath,
-                                                           intMath, intMath };
+                                                           intMath, intMath,
+                                                           intMath };
 union NumConvert_u InMode_StepChangeValue[NumOfParInEachMode] = {
         { .unintNum = 1 }, { .unintNum = 1 }, { .unintNum = 0 }, { .floatNum =
                 0.01 },
@@ -244,7 +247,7 @@ union NumConvert_u InMode_StepChangeValue[NumOfParInEachMode] = {
 union NumConvert_u InMode_MaxParameter[NumOfParInEachMode] = {
         { .unintNum = 50 }, { .unintNum = 10 }, { .unintNum = 0 }, { .floatNum =
                 0.6 },
-        { .unintNum = 500 }, { .floatNum = 20.0 }, { .unintNum = 19 } };
+        { .unintNum = 500 }, { .floatNum = 20.0 }, { .unintNum = 30 } };
 union NumConvert_u InMode_MinParameter[NumOfParInEachMode] = {
         { .unintNum = 4 }, { .unintNum = 2 }, { .unintNum = 0 }, { .floatNum =
                 0.2 },
@@ -254,14 +257,17 @@ uint32_t MaxTimesExtract = 90000, MinTimesExtract = 2000,
         stepTimesExtract = 100;
 uint32_t MaxExtract = 50, MinExtract = 15, stepExtract = 1;
 union NumConvert_u InTemp_MaxParameter[NumOfParTemperature] = {
-        { .floatNum = 110.0 }, { .floatNum = 125 }, { .unintNum = 99 }, {
-                .unintNum = 30 } };
+        { .floatNum = 125.0 }, { .floatNum = 130 }, { .unintNum = 95 }, {
+                .unintNum = 99 },
+        { .unintNum = 99 } };
 union NumConvert_u InTemp_MinParameter[NumOfParTemperature] = {
-        { .floatNum = 90.0 }, { .floatNum = 115 }, { .unintNum = 5 }, {
-                .unintNum = 1 } };
+        { .floatNum = 90.0 }, { .floatNum = 115 }, { .unintNum = 60 }, {
+                .unintNum = 5 },
+        { .unintNum = 1 } };
 union NumConvert_u InTemp_StepChangeValue[NumOfParTemperature] = {
         { .floatNum = 0.5 }, { .floatNum = 1.0 }, { .unintNum = 1 }, {
-                .unintNum = 1 } };
+                .unintNum = 1 },
+        { .unintNum = 1 } };
 float LCD_Step_Calib = 0.1f;
 char str[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0x7C, 0x38,
                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -270,7 +276,7 @@ typedef struct Node Node_t;
 typedef struct
 {
     uint8_t page;
-    Node_t *item[6];
+    Node_t *item[7];
     Node_t *returnN;
 } Node;
 
@@ -413,13 +419,13 @@ void GetButtonCmd(void)
         Ack_BSet = 0;
 
     }
-     if (BdownFlag == Down_Bt)
+    if (BdownFlag == Down_Bt)
     {
         Ack_Bdown = 0;
         VrTimer1[holdButtonDown] = 0;
         holdBtVrTimeDown = 25;
     }
-     if (BupFlag == Up_Bt)
+    if (BupFlag == Up_Bt)
     {
         holdBtVrTimeUp = 25;
         Ack_Bup = 0;
@@ -542,7 +548,6 @@ void ButtonSet_cmd()
                 ReturnNode();
         }
     }
-
 }
 void ButtonDown_cmd()
 {
@@ -609,7 +614,7 @@ void ButtonDown_cmd()
                 Up_window_index = Pr_Index;
                 Down_window_index = Up_window_index - 3;
             }
-            uint8_t pageNum = 13;
+            // uint8_t pageNum = 13;
             //AckPrAdjIndex(0, pageNum);
         }
     }
@@ -690,8 +695,8 @@ void ButtonUp_cmd()
                 Down_window_index = Pr_Index;
                 Up_window_index = Down_window_index + 3;
             }
-            uint8_t pageNum = 13;
-           // AckPrAdjIndex(0, pageNum);
+            //uint8_t pageNum = 13;
+            // AckPrAdjIndex(0, pageNum);
         }
     }
     else
@@ -930,9 +935,11 @@ void Page0_Display(void)
         sprintf(Str_Temp, "%.0f", *(float*) dataSentList[tempExtrude]); // pulse volumeter
         Disp_Str_5x8_Image(7, 40, (uint8_t*) Str_Temp, LCD_IMAGE);
 #endif
+        sprintf(Str_Temp, "%.0f", *(float*) dataSentList[PulseCount]); // pulse volumeter
+        Disp_Str_5x8_Image(7, 1, (uint8_t*) Str_Temp, LCD_IMAGE);
         if (calibWeightFlag)
             Disp_Str_5x8_Image(5, 10, "Weight calibration", LCD_IMAGE);
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 5; i++)
         {
             id_Page0 = idPage0Display[i];
             switch (id_Page0)
@@ -942,9 +949,9 @@ void Page0_Display(void)
                 Str_Display = LCD_String_Page0[id_Page0];
                 Disp_Str_5x8_Image(6, LCD_PosStr_page0[id_Page0],
                                    (uint8_t*) Str_Display, LCD_IMAGE);
-                Str_Display = LCD_String_Page0[id_Page0 + 1];
-                Disp_Str_5x8_Image(7, LCD_PosStr_page0[id_Page0 + 1],
-                                   (uint8_t*) Str_Display, LCD_IMAGE);
+                /*                Str_Display = LCD_String_Page0[id_Page0 + 1];
+                 Disp_Str_5x8_Image(6, LCD_PosStr_page0[id_Page0 + 1],
+                 (uint8_t*) Str_Display, LCD_IMAGE);*/
                 break;
 
                 // Display image make cofffee process
@@ -987,12 +994,12 @@ void Page0_Display(void)
                 break;
             case 1: // Dang ve sinh
                 Str_Display = LCD_String_Page0[id_Page0];
-                Disp_Str_5x8_Image(7, LCD_PosStr_page0[id_Page0],
+                Disp_Str_5x8_Image(6, LCD_PosStr_page0[id_Page0],
                                    (uint8_t*) Str_Display, LCD_IMAGE);
                 break;
             case 2:     // Tha thuoc ve sinh
                 Str_Display = LCD_String_Page0[id_Page0];
-                Disp_Str_5x8_Image(7, LCD_PosStr_page0[id_Page0],
+                Disp_Str_5x8_Image(6, LCD_PosStr_page0[id_Page0],
                                    (uint8_t*) Str_Display, LCD_IMAGE);
                 break;
                 //case 4:
@@ -1003,14 +1010,21 @@ void Page0_Display(void)
                 break;
             case 12:    // ma loi
                 Str_Display = LCD_String_Page0[id_Page0];
-                Disp_Str_5x8_Image(8, LCD_PosStr_page0[id_Page0],
+                Disp_Str_5x8_Image(7, LCD_PosStr_page0[id_Page0],
                                    (uint8_t*) Str_Display, LCD_IMAGE);
                 DisplayError();
                 break;
             case 13:
+                // Ngam coi
                 Str_Display = LCD_String_Page0[id_Page0];
                 Disp_Str_5x8_Image(6, LCD_PosStr_page0[id_Page0],
                                    (uint8_t*) Str_Display, LCD_IMAGE);
+                break;
+            case 14:
+                // Canh bao
+                Str_Display = LCD_String_Page0[id_Page0];
+                Disp_Str_5x8_Image(7, 95, (uint8_t*) Str_Display, LCD_IMAGE);
+                DisplayWarning();
                 break;
             }
         }
@@ -1327,7 +1341,7 @@ void Page11_Display(void)
     Str_Display = "nuoc: ";
     Disp_Str_5x8_Image(2, 1, (uint8_t*) Str_Display, LCD_IMAGE);
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[HotWaterTemp]);
-    Disp_Str_5x8_Image(2, 35, (uint8_t*) Str_Temp, LCD_IMAGE);
+    Disp_Str_5x8_Image(2, 30, (uint8_t*) Str_Temp, LCD_IMAGE);
 
     Str_Display = "Set: ";
     Disp_Str_5x8_Image(2, 60, (uint8_t*) Str_Display, LCD_IMAGE);
@@ -1339,7 +1353,7 @@ void Page11_Display(void)
     Str_Display = "Hoi: ";
     Disp_Str_5x8_Image(4, 1, (uint8_t*) Str_Display, LCD_IMAGE);
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[BoilerTemp]);
-    Disp_Str_5x8_Image(4, 35, (uint8_t*) Str_Temp, LCD_IMAGE);
+    Disp_Str_5x8_Image(4, 30, (uint8_t*) Str_Temp, LCD_IMAGE);
 
     Str_Display = "Set: ";
     Disp_Str_5x8_Image(4, 60, (uint8_t*) Str_Display, LCD_IMAGE);
@@ -1351,24 +1365,40 @@ void Page11_Display(void)
     Str_Display = "Coi:";
     Disp_Str_5x8_Image(6, 1, (uint8_t*) Str_Display, LCD_IMAGE);
     sprintf(Str_Temp, "%.0f", *(float*) dataSentList[GroupTemp]);
-    Disp_Str_5x8_Image(6, 35, (uint8_t*) Str_Temp, LCD_IMAGE);
+    Disp_Str_5x8_Image(6, 30, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-    Str_Display = "Run: ";
+    Str_Display = "Set:";
     Disp_Str_5x8_Image(6, 60, (uint8_t*) Str_Display, LCD_IMAGE);
-    uint8_t objectIndexGroupDuty = 40;
-    sprintf(Str_Temp, "%d", Pr_PacketCopy[objectIndexGroupDuty]);
+    uint8_t objectIndexGroupTempSet = 40;
+    sprintf(Str_Temp, "%d", Pr_PacketCopy[objectIndexGroupTempSet]);
     Disp_Str_5x8_Image(6, 90, (uint8_t*) Str_Temp, LCD_IMAGE);
 
-    Str_Display = "Off: ";
+    Str_Display = "Run: ";
     Disp_Str_5x8_Image(8, 1, (uint8_t*) Str_Display, LCD_IMAGE);
-    uint8_t objectIndexGroupShutdowDuty = 41;
+    uint8_t objectIndexGroupDuty = 41;
+    sprintf(Str_Temp, "%d", Pr_PacketCopy[objectIndexGroupDuty]);
+    Disp_Str_5x8_Image(8, 30, (uint8_t*) Str_Temp, LCD_IMAGE);
+
+    Str_Display = "Off: ";
+    Disp_Str_5x8_Image(8, 60, (uint8_t*) Str_Display, LCD_IMAGE);
+    uint8_t objectIndexGroupShutdowDuty = 42;
     sprintf(Str_Temp, "%d", Pr_PacketCopy[objectIndexGroupShutdowDuty]);
-    Disp_Str_5x8_Image(8, 35, (uint8_t*) Str_Temp, LCD_IMAGE);
+    Disp_Str_5x8_Image(8, 90, (uint8_t*) Str_Temp, LCD_IMAGE);
 //------------------------------------------------------------------------
 // Display cursor
-
+    uint8_t temp;
+    if (Pr_Index == 3)
+    {
+        temp = 9;
+        id = 0;
+    }
+    else
+    {
+        temp = 6;
+    }
     pointer_pos = (Pr_Index - id + 1) * 2;
-    Page_Cursor_Display(6, pointer_pos);
+
+    Page_Cursor_Display(temp, pointer_pos);
 
 }
 void PageManual_Display(void)
@@ -1512,11 +1542,43 @@ void DisplayError(void)
 
         char eStr[5] = "E";
         strcat(eStr, Str_ErrorNum);
-        Disp_Str_5x8_Image(8, 50, (uint8_t*) eStr, LCD_IMAGE);
+        Disp_Str_5x8_Image(7, 45, (uint8_t*) eStr, LCD_IMAGE);
         return;
     }
     imask = 0;
 }
+void DisplayWarning(void)
+{
+    uint8_t i;
+    static uint8_t imask = 0;
+    if (WarningFlag)
+    {
+        if (VrTimer1[displayWarning] > 2)
+        {
+            for (i = imask; i < 5; i++)
+            {
+                if (WarningMachine[i].ErrorFlag == NULL)
+                    continue;
+                if (*WarningMachine[i].ErrorFlag == true)
+                {
+                    sprintf(Str_WarningNum, "%d", i);
+                    imask = i;
+                    break;
+                }
+
+            }
+            (i < 5) ? (imask++, VrTimer1[displayWarning] = 0) : (imask = 0);
+        }
+        else
+            VrTimer1[displayWarning]++;
+        char wStr[5] = "W";
+        strcat(wStr, Str_WarningNum);
+        Disp_Str_5x8_Image(7, 115, (uint8_t*) wStr, LCD_IMAGE);
+        return;
+    }
+    imask = 0;
+}
+
 void Page_Cursor_Display(uint8_t page, uint8_t pos)
 {
     uint8_t n, col;

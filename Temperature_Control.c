@@ -19,7 +19,7 @@
 #include "DCL_PID.h"
 
 #define Shutdown_Temp_Steam 125.0f
-#define Shutdown_Temp_HotWater 110.0f
+#define Shutdown_Temp_HotWater 125.0f
 
 #define PID_method
 extern TCA9539Regs TCA9539_IC1, TCA9539_IC2, TCA9539_IC3;

@@ -31,7 +31,7 @@ static float K_Level;
 volatile uint8_t range = 0;
 float VRT, VR, RT, TX, ln, Group_Temp;
 extern float Extrude_Vout;
-extern uint32_t wGroupDuty, wGroupShutdownDuty;
+extern uint32_t wGroupDuty, wGroupShutdownDuty, wGroupTempSet;
 #define RT0 10000
 #define B 3977
 #define T0 298.15
@@ -101,91 +101,8 @@ void CNTL_Extrude()
         TX = (1 / ((ln / B) + (1 / T0))); //Temperature from thermistor
         Group_Temp = TX - 273.15;
     }
-    if (Group_Temp > 85)
+    if (Group_Temp > wGroupTempSet)
         Extrude_Vout = wGroupShutdownDuty;
     else
         Extrude_Vout = wGroupDuty;
-    /*   switch (range)
-     {
-     case 0:
-     if (temp < 35)
-     {
-     Extrude_Vout = 80;
-     range = 0;
-     }
-     else
-     range = 1;
-     break;
-     case 1:
-     if (32 < temp && temp < 47)
-     {
-     Extrude_Vout = 70;
-     range = 1;
-     }
-     else
-     {
-     if (temp > 46)
-     range = 2;
-     else
-     range = 0;
-     }
-     break;
-     case 2:
-     if (46 < temp && temp < 56)
-     {
-     range = 2;
-     Extrude_Vout = 50;
-     }
-     else
-     {
-     if (temp > 55)
-     range = 3;
-
-     else
-     range = 1;
-
-     }
-     break;
-     case 3:
-     if (55 < temp && temp < 60)
-     {
-     Extrude_Vout = 30;
-     range = 3;
-     }
-     else
-     {
-     if (temp > 59)
-     range = 4;
-     else
-     range = 2;
-
-     }
-     break;
-     case 4:
-     if (59 < temp && temp < 62)
-     {
-     Extrude_Vout = 15;
-     range = 4;
-     }
-     else
-     {
-     if (temp > 61)
-     range = 5;
-     else
-     range = 3;
-
-     }
-     break;
-     case 5:
-     if (temp > 61)
-     {
-     Extrude_Vout = 0;
-     range = 5;
-     }
-     else
-     range = 4;
-     break;
-
-     }
-     */
 }

@@ -62,7 +62,7 @@
 #define NumOfParInEachMode  7
 #define NumberOfParameter 48
 #define NumOfObjWindow 4
-#define NumOfParTemperature  4
+#define NumOfParTemperature  5
 struct AmountofWater
 {
     uint32_t stage_1;   //  Low flow
@@ -135,6 +135,10 @@ enum errorlist
     eCoffeOutletDetect,
     eHomeReturn
 };
+enum warninglist
+{
+    wSteamOpen, wSteamTimeOut
+};
 enum warningList
 {
     wRonTimeLife, wBladeLife, wTempHotwater
@@ -147,7 +151,7 @@ typedef struct
     char *ErrorMsg;
 
 } Error_t;
-Error_t ErrorMachine[16];
+Error_t ErrorMachine[16], WarningMachine[5];
 uint8_t ErrorMachine_id[16];
 extern uint16_t eVrTimer[8];
 typedef enum eVrTimerList_e
@@ -174,7 +178,8 @@ enum VirtualTimer
     displayTemperature,
     holdButtonUp,
     displayError,
-    holdButtonDown
+    holdButtonDown,
+    displayWarning
 
 };
 typedef enum ManualTest_e
@@ -197,4 +202,5 @@ void ParameterDefaultSetting();
 void AssignParameterForMode(Mode_Parameter_t *thisMode, uint32_t **vPar);
 void AssignGobalParSetting(uint32_t **vPar);
 void AssignErrorList(void);
+void AssginWarningList(void);
 #endif /* COFFEE_MACHINE_H_ */

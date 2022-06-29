@@ -17,7 +17,7 @@ extern float HotWater_Temperature_Ref, Steam_Temperature_Ref;
 extern uint16_t PitchOfpress;
 extern _Bool Pr_PacketCopyMask[];
 extern uint32_t wBladeATimes, wBladeBTimes, wExtractionATimes,
-        wExtractionBTimes, wGroupDuty, wGroupShutdownDuty;
+        wExtractionBTimes, wGroupDuty, wGroupShutdownDuty, wGroupTempSet;
 extern uint32_t wExtract_MaxTime, wExtract_MinTime;
 extern uint16_t BladeA, BladeB, Ron;
 void ParameterDefaultSetting()
@@ -105,6 +105,7 @@ void ParameterDefaultSetting()
     Ron = 0;
     wGroupDuty = 50;
     wGroupShutdownDuty = 5;
+    wGroupTempSet = 80;
 }
 void AssignParameterForMode(Mode_Parameter_t *thisMode, uint32_t **vPar)
 {
@@ -131,8 +132,10 @@ void AssignGobalParSetting(uint32_t **vPar)
     vPar[IndexGobalPar + 5] = (uint32_t*) &wExtract_MinTime;
     vPar[IndexGobalPar + 6] = (uint32_t*) &HotWater_Temperature_Ref;
     vPar[IndexGobalPar + 7] = (uint32_t*) &Steam_Temperature_Ref;
-    vPar[IndexGobalPar + 8] = (uint32_t*) &wGroupDuty;
-    vPar[IndexGobalPar + 9] = (uint32_t*) &wGroupShutdownDuty;
+    vPar[IndexGobalPar + 8] = (uint32_t*) &wGroupTempSet;
+    vPar[IndexGobalPar + 9] = (uint32_t*) &wGroupDuty;
+    vPar[IndexGobalPar + 10] = (uint32_t*) &wGroupShutdownDuty;
+
 
 }
 void AssignErrorList(void)
@@ -149,8 +152,8 @@ void AssignErrorList(void)
     ErrorMachine[eLevelSensor].ErrorFlag = &ErPumpSteam;  // Loi cam bien muc
     ErrorMachine[eHotWaterOpen].ErrorFlag = &ErHotWater; // Loi cam bien nhiet binh nc nong
     ErrorMachine[eHotWaterTimeOut].ErrorFlag = &ErHotWaterTimeOut; // Loi ko dun binh nc nong
-    ErrorMachine[eSteamOpen].ErrorFlag = &ErSteam;  // loi cam bien binh hoi
-    ErrorMachine[eSteamTimeOut].ErrorFlag = &ErSteamTimeOut; // Loi ko dun binh hoi
+    //ErrorMachine[eSteamOpen].ErrorFlag = &ErSteam;  // loi cam bien binh hoi
+    //ErrorMachine[eSteamTimeOut].ErrorFlag = &ErSteamTimeOut; // Loi ko dun binh hoi
     ErrorMachine[ePumpPulseFast].ErrorFlag = NULL;
     ErrorMachine[ePumpPulseSlow].ErrorFlag = NULL;
     ErrorMachine[eNoPumpPulse].ErrorFlag = &ErNoPumpPulse; // Loi ko co xung luu luong
@@ -173,5 +176,14 @@ void AssignErrorList(void)
     ErrorMachine[eNoPumpPulse].ErrorMsg = "Loi ko xung luu luong";
     ErrorMachine[eCoffeOutletDetect].ErrorMsg = "loi cam bien cafe ra";
     ErrorMachine[eHomeReturn].ErrorMsg = "Loi ve home";
+
+}
+void AssginWarningList(void)
+{
+    uint8_t i;
+    for (i = 0; i < 5; i++)
+        WarningMachine[i].ErrorFlag = NULL;
+    WarningMachine[wSteamOpen].ErrorFlag = &ErSteam;
+    WarningMachine[wSteamTimeOut].ErrorFlag = &ErSteamTimeOut;
 
 }

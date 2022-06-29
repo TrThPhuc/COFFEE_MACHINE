@@ -40,6 +40,7 @@ extern void Cmd_WriteMsg(void (*pFun)(void*), void *pArg);
 void WatchdogInit(void);
 void WatchdogIntHandler(void);
 void SweptErrorMachine(void);
+void SweptWarningMachine(void);
 void ClearError(void);
 // The error routine that is called if the driver library encounters an error.
 #ifdef DEBUG
@@ -165,7 +166,7 @@ void Spi1_ADS1118_Interface_Cnf(void); // Configurate Spi for communicate ADS111
 extern void SSI1_IntHandler(void);
 void ADS1118_Cal(ADS1118_t *ADS); // Calculate temperature
 extern float Group_Temp;
-uint32_t wGroupDuty, wGroupShutdownDuty;
+uint32_t wGroupDuty, wGroupShutdownDuty, wGroupTempSet;
 volatile uint8_t datacount = 0;
 uint32_t datas, fb_config;
 #define MEM_BUFFER_SIZE         2
@@ -270,7 +271,7 @@ extern bool InProcess, InCleanning, InStartUp, InWarming, calibWeightFlag,
 extern bool InModuleTest;
 extern uint8_t calibWeightObj;
 bool idleMachine, p_idleMachine, fullOfGroundsDrawer, Suf_HotWater,
-        FinishStartUp, HeatingPress, Error, Id_Msg_flag;
+        FinishStartUp, Error, WarningFlag, Id_Msg_flag;
 extern uint8_t blinkCurVr, ObjSelectFlag;
 extern _Bool blinkCur;
 
@@ -284,8 +285,8 @@ uint16_t speedtest = 2000;
 uint8_t flag_test;
 float m = 0.9;
 
-volatile _Bool En, EnMakeCoffee, GrindTest = 0;
-;
+volatile _Bool En, EnMakeCoffee, GrindTest = 0, EnCleanProcess;
+
 volatile bool firstCup = true;
 uint32_t sp = 2000, dd, ss = 0;
 
@@ -440,7 +441,7 @@ void main(int argc, char **argv)
     dataSentList[HotWaterTemp] = (uint16_t*) &Gui_HotWaterSteam;
     dataSentList[ExtractionTime] = (uint16_t*) &Gui_CoffeeExtractionTime;
 
-    dataSentList[tempExtrude] = (uint16_t*) &MilliLitresBuffer;
+    dataSentList[PulseCount] = (uint16_t*) &MilliLitresBuffer;
 
     dataSentList[Brand] = (uint16_t*) &BrandName;
     dataSentList[SeriNumber] = (uint16_t*) &SeriNum;
@@ -477,6 +478,7 @@ void main(int argc, char **argv)
     CountDataStorage[BladeR] = &BladeB;
     CountDataStorage[RonTimes] = &Ron;
     AssignErrorList();
+    AssginWarningList();
 // Read EEPROM memory
 
 #ifdef SaveEeprom
@@ -761,7 +763,7 @@ void C1(void)
     }
 
 // ---------------------------------------- Button Cleanning & GUI ------------------------------//
-    if ((release_CleanB == 1) && (EnMakeCoffee == 1))
+    if ((release_CleanB == 1) && (EnCleanProcess == 1))
     {
 // Cleanning complete machine
         if ((TCA9539_IC1.TCA9539_Input.all & Clean_Bt) == 0)
@@ -1015,6 +1017,15 @@ eVrTimer[eVrCoffeOutlet] = 0;
 #ifndef debug
     if (countGrounds >= 50)
         fullOfGroundsDrawer = 1;
+    else
+        fullOfGroundsDrawer = 0;
+    if (fullOfGroundsDrawer
+            && (TCA9539_IC1.TCA9539_Input.all & Cancel_Task) == 0)
+    {
+        countGrounds = 0;
+        cancel_cmd = 0;
+    }
+
     if (Gui_HotWaterSteam >= 94 && !ErHotWater) // Temperature of hotwater steam to extraction
         Suf_HotWater = 1;
     else
@@ -1023,13 +1034,6 @@ eVrTimer[eVrCoffeOutlet] = 0;
             || InWarming || InManualTest);
     p_idleMachine = !(InProcess || InCleanning);
 #if(WarmingMethod == HeatingResWarming)
-    /*
-     if (temp >= 50)
-     HeatingPress = 1;
-     else
-     HeatingPress = 0;
-     */
-    HeatingPress = 1;
 #endif
 
     if (!GrindTest)
@@ -1038,6 +1042,7 @@ eVrTimer[eVrCoffeOutlet] = 0;
         En = ((idleMachine) && FinishStartUp && (!fullOfGroundsDrawer)
                 && (!Error));
         SweptErrorMachine();
+        SweptWarningMachine();
 
     }
     else
@@ -1048,6 +1053,7 @@ eVrTimer[eVrCoffeOutlet] = 0;
         Error = 0;
     }
     EnMakeCoffee = En && HomePage;
+    EnCleanProcess = ((idleMachine) && (!Error));
 #endif
 //================================ Message id to lcd =============================================
     Id_Msg_flag = fullOfGroundsDrawer || !idleMachine || Error || En;
@@ -1064,6 +1070,7 @@ eVrTimer[eVrCoffeOutlet] = 0;
             (idPage0Display[1] = 10) : (idPage0Display[1] = 0xFF);
 //---------------------------------------------------------------------------------
     (Error) ? (idPage0Display[2] = 12) : (idPage0Display[2] = 0xFF);
+    (WarningFlag) ? (idPage0Display[4] = 14) : (idPage0Display[4] = 0xFF);
 //---------------------------------------------------------------------------------
     if (En && !calibWeightFlag)
     {
@@ -1148,6 +1155,21 @@ void SweptErrorMachine(void)
         {
             _Bool e = *ErrorMachine[i].ErrorFlag;
             Error = Error || e;
+        }
+    }
+
+}
+void SweptWarningMachine(void)
+{
+    uint8_t i;
+    WarningFlag = 0;
+    for (i = 0; i < 5; i++)
+    {
+        if (WarningMachine[i].ErrorFlag != NULL)
+
+        {
+            _Bool w = *WarningMachine[i].ErrorFlag;
+            WarningFlag = WarningFlag || w;
         }
     }
 

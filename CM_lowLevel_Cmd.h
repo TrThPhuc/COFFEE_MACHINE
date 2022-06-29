@@ -80,7 +80,7 @@ StepInWarmingProcess Wm_Step;
 // stepPos5 - pos-extraction
 uint32_t pos1 = 118, pos2 = 149;  // position for compress process
 uint32_t stepPos1 = 4100, stepPos2 = 4000, stepPos3 = 800, stepPos4 = 200,
-        stepPos5 = 100; // Extract Pos  //600
+        stepPos5 = 5000; // 100
 // unit X (mm) * 100 = stepPos
 
 //175 210
@@ -116,7 +116,7 @@ uint32_t sp3 = 3400;
 #define k1 0.35
 #define k2 0.5
 #define k3 1
-float infu = 2, infu_cl = 60;
+float infu = 4, infu_cl = 60,infu1 = 2;
 uint32_t speedstep = 12000;
 uint32_t ppo;
 
