@@ -59,7 +59,7 @@
 #define NonSensorOutlet     0
 #define Outlet  NonSensorOutlet
 
-#define NumOfParInEachMode  7
+#define NumOfParInEachMode  8
 #define NumberOfParameter 48
 #define NumOfObjWindow 4
 #define NumOfParTemperature  5
@@ -77,6 +77,7 @@ typedef struct Mode_Parameter
     uint32_t PreInfusion;           // Pre-Infusion Time. Uint - second
     uint32_t PosInfusion;
     float SpeedMotorInfusion;
+    float SpeedMotorExtract;
     uint32_t Time;                  // Time for extraction  Uinit - second
 
     struct AmountofWater AmountOfWaterPumping;

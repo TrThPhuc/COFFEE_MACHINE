@@ -120,6 +120,8 @@ void AssignParameterForMode(Mode_Parameter_t *thisMode, uint32_t **vPar)
     vPar[index + 4] = (uint32_t*) &thisMode->AmountOfWaterPumping.stage_1;
     vPar[index + 5] = (uint32_t*) &thisMode->GrindingDuration;
     vPar[index + 6] = (uint32_t*) &thisMode->Pitch;
+    vPar[index + 7] = (uint32_t*) &thisMode->SpeedMotorExtract;
+
 }
 void AssignGobalParSetting(uint32_t **vPar)
 {
@@ -150,8 +152,8 @@ void AssignErrorList(void)
     ErrorMachine[eAds11118].ErrorFlag = &eCom_Ads1118; //Loi giao tiep ic cam bien ads118
     ErrorMachine[eFaultMotor].ErrorFlag = NULL;
     ErrorMachine[eLevelSensor].ErrorFlag = &ErPumpSteam;  // Loi cam bien muc
-    ErrorMachine[eHotWaterOpen].ErrorFlag = &ErHotWater; // Loi cam bien nhiet binh nc nong
-    ErrorMachine[eHotWaterTimeOut].ErrorFlag = &ErHotWaterTimeOut; // Loi ko dun binh nc nong
+    //ErrorMachine[eHotWaterOpen].ErrorFlag = &ErHotWater; // Loi cam bien nhiet binh nc nong
+    //ErrorMachine[eHotWaterTimeOut].ErrorFlag = &ErHotWaterTimeOut; // Loi ko dun binh nc nong
     //ErrorMachine[eSteamOpen].ErrorFlag = &ErSteam;  // loi cam bien binh hoi
     //ErrorMachine[eSteamTimeOut].ErrorFlag = &ErSteamTimeOut; // Loi ko dun binh hoi
     ErrorMachine[ePumpPulseFast].ErrorFlag = NULL;

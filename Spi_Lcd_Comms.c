@@ -213,7 +213,7 @@ char *LCD_String_Page6[NumOfParInEachMode] = { "Pre-infusion1(s): ",
                                                "MotorInfusion: ",
                                                "SpeedMotor: ",
                                                "Nuoc ra(xung): ",
-                                               "Tgian xay(s): ", "Do ep(mm): " }; //
+                                               "Tgian xay(s): ", "Do ep(mm): ", "Speed: " }; //
 
 char *LCD_String_Page2[10] = { "Espresso 1 ly", "Espresso 2 ly",
                                "Special 1 ly ", "Special 2 ly", "Gioi Han",
@@ -234,24 +234,27 @@ char LCD_PosStr_page0[16] = { 34, 32, 15, 10, 55, 16, 8, 20, 10, 24, 35, 35, 5,
 MathType Int_Format_parameter[NumOfParInEachMode] = { intMath, intMath,
                                                       boolMath, floatMath,
                                                       intMath, floatMath,
-                                                      intMath };
+                                                      intMath, floatMath };
 MathType Int_Format_TempParameter[NumOfParTemperature] = { floatMath, floatMath,
                                                            intMath, intMath,
                                                            intMath };
 union NumConvert_u InMode_StepChangeValue[NumOfParInEachMode] = {
         { .unintNum = 1 }, { .unintNum = 1 }, { .unintNum = 0 }, { .floatNum =
                 0.01 },
-        { .unintNum = 1 }, { .floatNum = 0.1 }, { .unintNum = 1 } };
+        { .unintNum = 1 }, { .floatNum = 0.1 }, { .unintNum = 1 }, { .floatNum =
+                0.01 } };
 
 // preInfusion, volume Pulse, grinding dur, Temperature, Pitch
 union NumConvert_u InMode_MaxParameter[NumOfParInEachMode] = {
-        { .unintNum = 50 }, { .unintNum = 10 }, { .unintNum = 0 }, { .floatNum =
+        { .unintNum = 50 }, { .unintNum = 50 }, { .unintNum = 0 }, { .floatNum =
                 0.6 },
-        { .unintNum = 500 }, { .floatNum = 20.0 }, { .unintNum = 30 } };
+        { .unintNum = 500 }, { .floatNum = 50.0 }, { .unintNum = 30 }, {
+                .floatNum = 0.98 } };
 union NumConvert_u InMode_MinParameter[NumOfParInEachMode] = {
-        { .unintNum = 4 }, { .unintNum = 2 }, { .unintNum = 0 }, { .floatNum =
+        { .unintNum = 4 }, { .unintNum = 1 }, { .unintNum = 0 }, { .floatNum =
                 0.2 },
-        { .unintNum = 20 }, { .floatNum = 5.0 }, { .unintNum = 11 } };
+        { .unintNum = 20 }, { .floatNum = 5.0 }, { .unintNum = 11 }, {
+                .floatNum = 0.3 } };
 uint32_t MaxTimesBlade = 65000, MinTimesBlade = 2000, stepTimesBalde = 100;
 uint32_t MaxTimesExtract = 90000, MinTimesExtract = 2000,
         stepTimesExtract = 100;
@@ -261,7 +264,7 @@ union NumConvert_u InTemp_MaxParameter[NumOfParTemperature] = {
                 .unintNum = 99 },
         { .unintNum = 99 } };
 union NumConvert_u InTemp_MinParameter[NumOfParTemperature] = {
-        { .floatNum = 90.0 }, { .floatNum = 115 }, { .unintNum = 60 }, {
+        { .floatNum = 60.0 }, { .floatNum = 60 }, { .unintNum = 60 }, {
                 .unintNum = 5 },
         { .unintNum = 1 } };
 union NumConvert_u InTemp_StepChangeValue[NumOfParTemperature] = {
@@ -276,7 +279,7 @@ typedef struct Node Node_t;
 typedef struct
 {
     uint8_t page;
-    Node_t *item[7];
+    Node_t *item[8];
     Node_t *returnN;
 } Node;
 
@@ -916,19 +919,23 @@ void Page0_Display(void)
     {
         upload = 0;
         HomePage = 1;
-#ifdef debuglcd
-        static float tempGui;
-        if (VrTimer1[displayTemperature] >= 10)
+
+        static float tempGui, tempBolier;
+        if (VrTimer1[displayTemperature] >= 5)
         {
             VrTimer1[displayTemperature] = 0;
             tempGui = *(float*) dataSentList[HotWaterTemp];
+            tempBolier = *(float*) dataSentList[BoilerTemp];
         }
         else
             VrTimer1[displayTemperature]++;
 
         sprintf(Str_Temp, "%.1f", tempGui);     // hot water temperature
-        Disp_Str_5x8_Image(7, 72, (uint8_t*) Str_Temp, LCD_IMAGE);
+        Disp_Str_5x8_Image(7, 30, (uint8_t*) Str_Temp, LCD_IMAGE);
+        sprintf(Str_Temp, "%.1f", tempBolier);     // hot water temperature
+        Disp_Str_5x8_Image(7, 65, (uint8_t*) Str_Temp, LCD_IMAGE);
 
+#ifdef debuglcd
         sprintf(Str_Temp, "%.0f", *(float*) dataSentList[ExtractionTime]);  // extraction time
         Disp_Str_5x8_Image(7, 15, (uint8_t*) Str_Temp, LCD_IMAGE);
 

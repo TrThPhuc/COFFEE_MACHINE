@@ -768,26 +768,12 @@ void C1(void)
 // Cleanning complete machine
         if ((TCA9539_IC1.TCA9539_Input.all & Clean_Bt) == 0)
         {
-            //TCA9539_IC1.TCA9539_Onput.all |= LED_BT9;
-            /*            ledBlink = LED_CLEAN;
-             idModeRunning = 2;
-             CleanningMachine();
-             clModeRinse = 0;
-             release_CleanB = 0;*/
             CleanInterpreter(CLEANMODE, LED_CLEAN, 2);
             CleanningMachine();
-
         }
 // Rinse
         if ((TCA9539_IC1.TCA9539_Input.all & Rinse_Bt) == 0)
         {
-            //TCA9539_IC1.TCA9539_Onput.all |= LED_BT8;   // BT8
-            /*            ledBlink = LED_RINSE;
-             idModeRunning = 1;
-             CleanningMachine();
-             clModeRinse = 1;
-             release_CleanB = 0;
-             */
             CleanInterpreter(RINSEMODE, LED_RINSE, 1);
             CleanningMachine();
 
@@ -1026,10 +1012,11 @@ eVrTimer[eVrCoffeOutlet] = 0;
         cancel_cmd = 0;
     }
 
-    if (Gui_HotWaterSteam >= 94 && !ErHotWater) // Temperature of hotwater steam to extraction
+/*    if (Gui_HotWaterSteam >= 30 && !ErHotWater) // Temperature of hotwater steam to extraction
         Suf_HotWater = 1;
     else
-        Suf_HotWater = 0;
+        Suf_HotWater = 0;*/
+    Suf_HotWater = 1;
     idleMachine = !(InProcess || InStartUp || InCleanning || InLevelPumping
             || InWarming || InManualTest);
     p_idleMachine = !(InProcess || InCleanning);
@@ -1084,7 +1071,6 @@ eVrTimer[eVrCoffeOutlet] = 0;
 
     D_Group_Task = &D1;
 }
-
 //======================================= Peripheral function ===================================================
 void ADS1118_Coms(uint16_t config, int mode)
 {
@@ -1189,9 +1175,9 @@ void BlinkModeLed(void)
     {
         TCA9539_IC1.TCA9539_Onput.all ^= ledBlink;
         VrBlinkLed = 0;
+        return;
     }
-    else
-        VrBlinkLed++;
+    VrBlinkLed++;
 
 }
 void WatchdogIntHandler(void)

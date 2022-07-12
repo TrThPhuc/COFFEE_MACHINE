@@ -107,18 +107,18 @@ void FlowMeterCal()
                 Pumping_Process_Stop(Null);
             }
         }
-        /*        if (VrTimeVel >= 100)
-         {
-         VrTimeVel = 0;
-         FlowMeter = FlowMeter_Pulse * 0.25;
-         FlowMeter_Pulse = 0;
+        if (VrTimeVel >= 100)
+        {
+            VrTimeVel = 0;
+            FlowMeter = FlowMeter_Pulse * 0.25;
+            FlowMeter_Pulse = 0;
 
-         }
-         else
-         {
-         FlowMeter_Pulse += QEIVelocityGet(QEI0_BASE);
-         VrTimeVel++;
-         }*/
+        }
+        else
+        {
+            FlowMeter_Pulse += QEIVelocityGet(QEI0_BASE);
+            VrTimeVel++;
+        }
         /*
          if (!InPumping)
          return;
